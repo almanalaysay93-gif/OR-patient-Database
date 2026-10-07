@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #0f172a;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        color: #f8fafc;
+      }
+      #root {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        background: radial-gradient(circle at 50% 15%, #0369a1 0%, #0f172a 60%, #020617 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      .ambient-orb {
+        position: absolute;
+        width: 700px;
+        height: 700px;
+        border-radius: 50%;
+        filter: blur(100px);
+        opacity: 0.35;
+        pointer-events: none;
+      }
+      .orb-blue {
+        background: #0284c7;
+        top: -150px;
+        left: 200px;
+      }
+      .orb-teal {
+        background: #0d9488;
+        bottom: -150px;
+        right: 250px;
+      }
+
+      /* Master Glass Frame */
+      .glass-stage {
+        width: 1600px;
+        height: 900px;
+        background: rgba(15, 23, 42, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 28px;
+        backdrop-filter: blur(30px);
+        -webkit-backdrop-filter: blur(30px);
+        box-shadow: 0 40px 100px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .header-bar {
+        height: 84px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 40px;
+      }
+      .brand-title {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-weight: 700;
+        font-size: 24px;
+        letter-spacing: -0.02em;
+        color: #f8fafc;
+      }
+      .badge-offline {
+        background: rgba(14, 165, 233, 0.2);
+        border: 1px solid rgba(14, 165, 233, 0.4);
+        color: #38bdf8;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 12px;
+        border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .badge-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #34d399;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        background: #34d399;
+        border-radius: 50%;
+        box-shadow: 0 0 10px #34d399;
+      }
+
+      .scene-viewport {
+        flex: 1;
+        position: relative;
+        padding: 50px;
+      }
+
+      .scene {
+        position: absolute;
+        inset: 50px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        opacity: 0;
+        transform: translateY(24px);
+      }
+
+      .kicker {
+        font-size: 14px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #38bdf8;
+        margin-bottom: 12px;
+      }
+      .heading {
+        font-size: 54px;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        line-height: 1.15;
+        color: #ffffff;
+        margin-bottom: 20px;
+      }
+      .subtext {
+        font-size: 22px;
+        color: #94a3b8;
+        line-height: 1.5;
+        max-width: 980px;
+      }
+
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+        margin-top: 36px;
+      }
+      .glass-card {
+        background: rgba(30, 41, 59, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+      }
+      .card-stat {
+        font-size: 44px;
+        font-weight: 800;
+        color: #38bdf8;
+        letter-spacing: -0.03em;
+        margin-bottom: 6px;
+      }
+      .card-name {
+        font-size: 15px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #cbd5e1;
+        margin-bottom: 8px;
+      }
+      .card-desc {
+        font-size: 15px;
+        color: #94a3b8;
+        line-height: 1.45;
+      }
+
+      /* Progress Bar */
+      .track-timeline {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        height: 6px;
+        width: 100%;
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .progress-line {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #0284c7, #38bdf8);
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="12"
+      data-width="1920"
+      data-height="1080"
+    >
+      <div class="ambient-orb orb-blue"></div>
+      <div class="ambient-orb orb-teal"></div>
+
+      <div class="glass-stage">
+        <div class="header-bar">
+          <div class="brand-title">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14"/>
+            </svg>
+            <span>OR Patient Management Station</span>
+            <span class="badge-offline">Local SQLite</span>
+          </div>
+          <div class="badge-status">
+            <div class="dot"></div>
+            <span>Offline High-Integrity Architecture</span>
+          </div>
+        </div>
+
+        <div class="scene-viewport">
+          <!-- Scene 1: Overview -->
+          <div id="scene-1" class="scene">
+            <div class="kicker">Clinical Medical Workstation</div>
+            <h1 class="heading">Longitudinal Surgical Records & Flow</h1>
+            <p class="subtext">Engineered for high-throughput operating suites. Zero cloud latency, immutable audit logging, and single longitudinal patient tracking.</p>
+            <div class="grid-3">
+              <div class="glass-card">
+                <div class="card-stat">100%</div>
+                <div class="card-name">Offline Operation</div>
+                <div class="card-desc">Local SQLite persistence with WAL mode and transaction rollback guards.</div>
+              </div>
+              <div class="glass-card">
+                <div class="card-stat">1 : N</div>
+                <div class="card-name">Record Continuity</div>
+                <div class="card-desc">One persistent patient record over multiple admissions and surgical operations.</div>
+              </div>
+              <div class="glass-card">
+                <div class="card-stat">0-Slop</div>
+                <div class="card-name">Clinical Focus</div>
+                <div class="card-desc">Calm glass interface designed for instant cognitive capture in high-stress ORs.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Scene 2: Pre-OR Checklist -->
+          <div id="scene-2" class="scene">
+            <div class="kicker">Safety Milestone Engine</div>
+            <h1 class="heading">Pre-OR Checklist & Readiness Scoring</h1>
+            <p class="subtext">Configurable safety checklists calculating surgical readiness in real-time. Non-applicable items never penalize score.</p>
+            <div class="grid-3">
+              <div class="glass-card" style="border-left: 4px solid #10b981;">
+                <div class="card-stat" style="color: #34d399;">100%</div>
+                <div class="card-name">Dynamic Scoring</div>
+                <div class="card-desc">Derived from completed applicable items. Clear breakdown of pending requirements.</div>
+              </div>
+              <div class="glass-card" style="border-left: 4px solid #38bdf8;">
+                <div class="card-stat" style="color: #38bdf8;">Safety</div>
+                <div class="card-name">Verified Milestones</div>
+                <div class="card-desc">Consent, lateral site marking, NPO confirmation, and blood availability gates.</div>
+              </div>
+              <div class="glass-card" style="border-left: 4px solid #a855f7;">
+                <div class="card-stat" style="color: #c084fc;">Audit</div>
+                <div class="card-name">Clinician Stamp</div>
+                <div class="card-desc">Every checklist entry stamped with staff ID, timestamp, and audit trail.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Scene 3: Scheduling & Conflicts -->
+          <div id="scene-3" class="scene">
+            <div class="kicker">Real-Time Scheduling</div>
+            <h1 class="heading">OR Room Scheduling & Conflict Guard</h1>
+            <p class="subtext">Active 4-way collision protection. Detects overlapping room bookings, double-booked surgeons, and anesthesiologist collisions instantly.</p>
+            <div class="grid-3">
+              <div class="glass-card" style="border-left: 4px solid #f59e0b;">
+                <div class="card-stat" style="color: #fbbf24;">4-Way</div>
+                <div class="card-name">Conflict Detection</div>
+                <div class="card-desc">Automated validation preventing room, patient, surgeon, and staff collisions.</div>
+              </div>
+              <div class="glass-card" style="border-left: 4px solid #06b6d4;">
+                <div class="card-stat" style="color: #22d3ee;">Timestamps</div>
+                <div class="card-name">Turnover Tracking</div>
+                <div class="card-desc">Actual room-in, procedure start, end, and room-out timestamps for room census.</div>
+              </div>
+              <div class="glass-card" style="border-left: 4px solid #ec4899;">
+                <div class="card-stat" style="color: #f472b6;">Analytics</div>
+                <div class="card-name">Patient Cohorts</div>
+                <div class="card-desc">Demographics, procedures, outcomes, and research Excel exports.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="track-timeline">
+          <div id="progress" class="progress-line"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      // Progress bar over 12s
+      tl.to("#progress", { width: "100%", duration: 12, ease: "none" }, 0);
+
+      // Scene 1: 0s - 4s
+      tl.fromTo("#scene-1", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, 0.2);
+      tl.to("#scene-1", { opacity: 0, y: -20, duration: 0.5, ease: "power2.in" }, 3.5);
+
+      // Scene 2: 4s - 8s
+      tl.fromTo("#scene-2", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, 4.0);
+      tl.to("#scene-2", { opacity: 0, y: -20, duration: 0.5, ease: "power2.in" }, 7.5);
+
+      // Scene 3: 8s - 12s
+      tl.fromTo("#scene-3", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.6, ease: "power2.out" }, 8.0);
+      tl.to("#scene-3", { opacity: 1, duration: 3.5 }, 8.5);
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>
