@@ -1,37 +1,22 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { openMemoryDb } from "../data/sqljs-adapter";
 import { runMigrations } from "../data/migrations";
 import type { Db } from "../data/db";
 import { createPatient, createAdmission, createSurgicalCase } from "./patients";
 import { scheduleCase } from "./scheduling";
-import { TOOL_DEFINITIONS, executeTool, type EntityMap } from "./assistantTools";
-import {
-  AssistantError,
-  loadRedactionIndex,
-  redactUserText,
-  runAssistantTurn,
-  saveAssistantConfig,
-  getAssistantConfig,
-  DEFAULT_MODEL,
-} from "./assistant";
+import { executeTool, type EntityMap } from "./assistantTools";
+import { HELP_TEXT, answerQuestion, parseDateScope } from "./assistant";
 
-// Identifiers that must never appear in anything sent to the model.
-const IDENTIFIERS = ["Juan", "Dela Cruz", "Reyes", "HRN-1001", "1990-01-01", "12 Mabini St", "09171234567", "ADM-"];
+// Wednesday.
+const NOW = new Date(2026, 9, 7, 9, 0);
 
-function expectDeidentified(value: unknown) {
-  const json = typeof value === "string" ? value : JSON.stringify(value);
-  for (const id of IDENTIFIERS) expect(json).not.toContain(id);
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-}
-
-describe("AI assistant", () => {
+describe("offline assistant", () => {
   let db: Db;
   let entities: EntityMap;
   let patientId: string;
   let caseId: string;
+
+  const ask = (question: string) => answerQuestion(db, question, entities, NOW);
 
   beforeEach(async () => {
     db = await openMemoryDb();
@@ -69,7 +54,6 @@ describe("AI assistant", () => {
       date: "2026-10-08",
       startTime: "08:00",
       estimatedDurationMinutes: 120,
-      notes: "Call Juan Dela Cruz family before induction",
     });
     await db.execute(
       "INSERT INTO case_team (case_team_id, case_id, staff_id, role, created_at) VALUES ('ct-1', ?, 'staff-surg', 'team-1', '2026-10-07T00:00:00Z')",
@@ -77,8 +61,8 @@ describe("AI assistant", () => {
     );
   });
 
-  describe("data tools", () => {
-    it("returns the schedule without patient identifiers and records the local link", async () => {
+  describe("lookups", () => {
+    it("returns the schedule and records which records it mentioned", async () => {
       const result: any = await executeTool(db, "get_or_schedule", { date: "2026-10-08" }, entities);
 
       expect(result.case_count).toBe(1);
@@ -91,40 +75,12 @@ describe("AI assistant", () => {
         patient_sex: "MALE",
       });
       expect(result.cases[0].team).toEqual([{ role: expect.any(String), name: "Dr. Smith" }]);
-      expectDeidentified(result);
-
       expect(entities.get("OR-000001")).toMatchObject({ kind: "patient", patientId, label: "Dela Cruz, Juan" });
       expect(entities.get("CASE-000101")).toMatchObject({ kind: "case", patientId, caseId });
     });
 
-    it("keeps every tool de-identified", async () => {
-      const calls: [string, Record<string, unknown>][] = [
-        ["list_cases", {}],
-        ["get_case", { case_number: "case-000101" }],
-        ["find_patient", { query: "Dela Cruz, Juan" }],
-        ["find_patient", { query: "HRN-1001" }],
-        ["get_patient", { research_id: "OR-000001" }],
-        ["get_preor_readiness", {}],
-        ["get_analytics_summary", {}],
-      ];
-      for (const [name, args] of calls) {
-        expectDeidentified(await executeTool(db, name, args, entities));
-      }
-      expect(TOOL_DEFINITIONS.map((t) => t.function.name).sort()).toEqual(
-        [...new Set(calls.map(([name]) => name)), "get_or_schedule"].sort()
-      );
-    });
-
-    it("finds a patient by name locally and returns only the research ID", async () => {
-      const byName: any = await executeTool(db, "find_patient", { query: "juan dela cruz" }, entities);
-      expect(byName.patients).toEqual([{ research_id: "OR-000001", age: 36, sex: "MALE", surgical_case_count: 1 }]);
-
-      const none: any = await executeTool(db, "find_patient", { query: "Santos" }, entities);
-      expect(none.match_count).toBe(0);
-    });
-
     it("returns the full case record with readiness", async () => {
-      const result: any = await executeTool(db, "get_case", { case_number: "CASE-000101" }, entities);
+      const result: any = await executeTool(db, "get_case", { case_number: "case-000101" }, entities);
       expect(result.found).toBe(true);
       expect(result.patient.research_id).toBe("OR-000001");
       expect(result.admission.ward).toBe("Surgical Ward 3");
@@ -145,128 +101,145 @@ describe("AI assistant", () => {
       await expect(executeTool(db, "get_or_schedule", { date: "tomorrow" }, entities)).rejects.toThrow(/YYYY-MM-DD/);
     });
 
-    it("groups ages above 89", async () => {
+    it("reports the real age", async () => {
       await createPatient(db, { firstName: "Old", lastName: "Timer", dateOfBirth: "1930-01-01", sex: "FEMALE" });
       const result: any = await executeTool(db, "get_patient", { research_id: "or-2" }, entities);
-      expect(result.age).toBe("90+");
+      expect(result.age).toBe(96);
     });
   });
 
-  describe("redaction of typed identifiers", () => {
-    it("replaces full names and HRNs with the research ID", async () => {
-      const index = await loadRedactionIndex(db);
-      expect(redactUserText("Is Juan Dela Cruz ready?", index, entities)).toBe("Is OR-000001 ready?");
-      expect(redactUserText("status of DELA CRUZ, JUAN", index)).toBe("status of OR-000001");
-      expect(redactUserText("juan reyes dela cruz today", index)).toBe("OR-000001 today");
-      expect(redactUserText("look up hrn-1001 please", index)).toBe("look up OR-000001 please");
-      expect(entities.get("OR-000001")?.patientId).toBe(patientId);
+  describe("dates", () => {
+    const scope = (text: string) => {
+      const s = parseDateScope(text, NOW);
+      return s && [s.from, s.to];
+    };
+
+    it("reads single days", () => {
+      expect(scope("schedule today")).toEqual(["2026-10-07", "2026-10-07"]);
+      expect(scope("cases tomorrow")).toEqual(["2026-10-08", "2026-10-08"]);
+      expect(scope("what happened yesterday")).toEqual(["2026-10-06", "2026-10-06"]);
+      expect(scope("schedule on 2026-11-02")).toEqual(["2026-11-02", "2026-11-02"]);
+      expect(scope("schedule Oct 12")).toEqual(["2026-10-12", "2026-10-12"]);
+      expect(scope("schedule 3 November")).toEqual(["2026-11-03", "2026-11-03"]);
+      expect(scope("cases on friday")).toEqual(["2026-10-09", "2026-10-09"]);
+      expect(scope("cases on wednesday")).toEqual(["2026-10-07", "2026-10-07"]);
     });
 
-    it("leaves ordinary text alone", async () => {
-      const index = await loadRedactionIndex(db);
-      const text = "How many nephrectomy cases this month?";
-      expect(redactUserText(text, index)).toBe(text);
+    it("reads periods", () => {
+      expect(scope("schedule this week")).toEqual(["2026-10-05", "2026-10-11"]);
+      expect(scope("next week")).toEqual(["2026-10-12", "2026-10-18"]);
+      expect(scope("cancelled last month")).toEqual(["2026-09-01", "2026-09-30"]);
+      expect(scope("summary this year")).toEqual(["2026-01-01", "2026-12-31"]);
+      expect(scope("cases in february")).toEqual(["2026-02-01", "2026-02-28"]);
+      expect(scope("which cases are not ready")).toBeNull();
     });
   });
 
-  describe("chat loop", () => {
-    const config = { apiKey: "sk-or-test", model: DEFAULT_MODEL };
+  describe("answers", () => {
+    it("shows the schedule for a day and for a period", async () => {
+      expect(await ask("schedule today")).toBe("No cases are scheduled today.");
 
-    it("runs tool calls and sends no identifiers to OpenRouter", async () => {
-      const sent: any[] = [];
-      const replies = [
-        {
-          choices: [{
-            message: {
-              role: "assistant",
-              content: null,
-              tool_calls: [{ id: "call_1", type: "function", function: { name: "get_or_schedule", arguments: '{"date":"2026-10-08"}' } }],
-            },
-          }],
-        },
-        { choices: [{ message: { role: "assistant", content: "One case: CASE-000101 for OR-000001." } }] },
-      ];
-      const fetchImpl = async (url: string, init?: RequestInit) => {
-        expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
-        expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer sk-or-test");
-        sent.push(JSON.parse(init?.body as string));
-        return jsonResponse(replies[sent.length - 1]);
-      };
+      const tomorrow = await ask("What is on the schedule tomorrow?");
+      expect(tomorrow).toContain("1 case scheduled tomorrow");
+      expect(tomorrow).toContain("08:00 · OR 1 · CASE-000101 · Left Nephrectomy · OR-000001");
+      expect(tomorrow).toContain("Dr. Smith");
 
-      const result = await runAssistantTurn({
-        db,
-        config,
-        history: [],
-        userText: "What is scheduled on 2026-10-08 for Juan Dela Cruz (HRN-1001)?",
-        entities,
-        fetchImpl,
-        now: new Date(2026, 9, 7, 9, 0),
-      });
-
-      expect(result.reply).toBe("One case: CASE-000101 for OR-000001.");
-      expect(result.toolsUsed).toEqual(["get_or_schedule"]);
-      expect(result.history.map((m) => m.role)).toEqual(["user", "assistant", "tool", "assistant"]);
-
-      expect(sent).toHaveLength(2);
-      expect(sent[0].model).toBe(DEFAULT_MODEL);
-      expect(sent[0].provider).toEqual({ data_collection: "deny" });
-      expect(sent[0].messages[0].content).toContain("2026-10-07 (Wednesday)");
-      expect(sent[0].messages[1].content).toBe("What is scheduled on 2026-10-08 for OR-000001 (OR-000001)?");
-      expect(sent[1].messages[3].role).toBe("tool");
-      for (const body of sent) expectDeidentified(body);
-
-      const audit = await db.select<{ new_value: string; patient_id: string | null }>(
-        "SELECT new_value, patient_id FROM audit_log WHERE action = 'ASSISTANT_QUERY'"
-      );
-      expect(audit).toHaveLength(1);
-      expect(JSON.parse(audit[0].new_value)).toEqual({ model: DEFAULT_MODEL, tools: ["get_or_schedule"] });
+      const week = await ask("cases this week");
+      expect(week).toContain("1 case scheduled this week");
+      expect(week).toContain("2026-10-08 08:00");
     });
 
-    it("reports tool failures back to the model instead of crashing", async () => {
-      const sent: any[] = [];
-      const fetchImpl = async (_url: string, init?: RequestInit) => {
-        sent.push(JSON.parse(init?.body as string));
-        return jsonResponse(
-          sent.length === 1
-            ? { choices: [{ message: { content: null, tool_calls: [{ id: "c1", type: "function", function: { name: "drop_tables", arguments: "{}" } }] } }] }
-            : { choices: [{ message: { content: "I cannot do that." } }] }
-        );
-      };
-      const result = await runAssistantTurn({ db, config, history: [], userText: "delete everything", entities, fetchImpl });
-      expect(result.reply).toBe("I cannot do that.");
-      expect(sent[1].messages[3].content).toContain("Unknown tool");
+    it("defaults to today when no day is named", async () => {
+      expect(await ask("schedule")).toBe("No cases are scheduled today.");
     });
 
-    it("explains a rejected key, a missing key and a network failure", async () => {
-      const base = { db, history: [], userText: "hi", entities };
-      await expect(
-        runAssistantTurn({ ...base, config, fetchImpl: async () => jsonResponse({ error: { message: "No auth" } }, 401) })
-      ).rejects.toThrow(/rejected the API key/);
-      await expect(runAssistantTurn({ ...base, config: { apiKey: "", model: DEFAULT_MODEL } })).rejects.toThrow(AssistantError);
-      await expect(
-        runAssistantTurn({ ...base, config, fetchImpl: async () => { throw new TypeError("Failed to fetch"); } })
-      ).rejects.toThrow(/internet connection/);
+    it("shows one case by its number", async () => {
+      const answer = await ask("status of case-000101?");
+      expect(answer).toContain("**CASE-000101**");
+      expect(answer).toContain("Patient: OR-000001 · 36 y · male");
+      expect(answer).toContain("Left Nephrectomy · Urology · elective");
+      expect(answer).toContain("Schedule: 2026-10-08 08:00 · OR 1 · 120 min");
+      expect(answer).toMatch(/Readiness: \d+% · pending: /);
+      expect(answer).toContain("Team: ");
+      expect(entities.get("CASE-000101")?.caseId).toBe(caseId);
     });
 
-    it("retries a rate-limited request, then gives up with a clear message", async () => {
-      let calls = 0;
-      const limitedOnce = async () =>
-        ++calls === 1
-          ? jsonResponse({ error: { message: "Provider returned error", code: 429 } }, 429)
-          : jsonResponse({ choices: [{ message: { content: "Done." } }] });
-      const base = { db, config, history: [], userText: "hi", entities };
-      const ok = await runAssistantTurn({ ...base, fetchImpl: limitedOnce, retryDelaysMs: [0] });
-      expect(ok.reply).toBe("Done.");
-      expect(calls).toBe(2);
-
-      const always = async () => jsonResponse({ error: { message: "Provider returned error", code: 429 } });
-      await expect(runAssistantTurn({ ...base, fetchImpl: always, retryDelaysMs: [0, 0] })).rejects.toThrow(/rate limited/);
+    it("finds a patient by name, HRN or research ID", async () => {
+      for (const q of ["Is Juan Dela Cruz ready?", "dela cruz", "look up hrn-1001", "OR-000001", "patient or-1"]) {
+        const answer = await ask(q);
+        expect(answer, q).toContain("OR-000001 · 36 y · male");
+        expect(answer, q).toContain("CASE-000101 · Left Nephrectomy");
+        expect(answer, q).toMatch(/\d+% ready/);
+      }
+      expect(entities.get("OR-000001")).toMatchObject({ patientId, label: "Dela Cruz, Juan" });
+      expect(await ask("OR-000099")).toBe("No patient has research ID OR-000099.");
     });
 
-    it("stores the key and model in app settings", async () => {
-      expect(await getAssistantConfig(db)).toEqual({ apiKey: "", model: DEFAULT_MODEL });
-      await saveAssistantConfig(db, { apiKey: "  sk-or-abc  ", model: "openai/gpt-6-luna" });
-      expect(await getAssistantConfig(db)).toEqual({ apiKey: "sk-or-abc", model: "openai/gpt-6-luna" });
+    it("does not read a room name as a research ID", async () => {
+      expect(await ask("schedule in OR 1 tomorrow")).toContain("1 case scheduled in OR 1 tomorrow");
+      await db.execute("INSERT INTO or_rooms (or_room_id, name, active, display_order) VALUES ('room-2', 'OR 2', 1, 2)");
+      expect(await ask("OR 2 tomorrow")).toBe("No cases are scheduled in OR 2 tomorrow.");
+    });
+
+    it("narrows shared surnames by first name", async () => {
+      await createPatient(db, { firstName: "Maria", lastName: "Dela Cruz", dateOfBirth: "1985-05-05", sex: "FEMALE" });
+      const both = await ask("dela cruz");
+      expect(both).toContain("OR-000001");
+      expect(both).toContain("OR-000002");
+      const one = await ask("maria dela cruz");
+      expect(one).toContain("OR-000002");
+      expect(one).not.toContain("OR-000001");
+    });
+
+    it("lists readiness", async () => {
+      const notReady = await ask("Which cases are not ready?");
+      expect(notReady).toContain("1 case not ready yet (of 1 waiting)");
+      expect(notReady).toContain("CASE-000101");
+      expect(notReady).toContain("pending: ");
+      expect(await ask("ready cases")).toBe("None of the 1 waiting case is ready yet.");
+    });
+
+    it("filters by status, type, specialty and delay", async () => {
+      expect(await ask("cancelled cases this month")).toBe("No cancelled cases this month.");
+      expect(await ask("emergency cases")).toBe("No emergency cases.");
+      expect(await ask("elective cases this week")).toContain("1 elective case this week");
+      expect(await ask("urology cases")).toContain("1 Urology case:");
+      expect(await ask("delayed cases this month")).toBe("No delayed cases this month.");
+
+      await db.execute("UPDATE surgical_cases SET case_status = 'CANCELLED' WHERE case_id = ?", [caseId]);
+      const cancelled = await ask("How many cases were cancelled this month?");
+      expect(cancelled).toContain("1 cancelled case this month");
+      expect(cancelled).toContain("CASE-000101");
+    });
+
+    it("summarises statistics and complications", async () => {
+      const stats = await ask("how many cases in total");
+      expect(stats).toContain("Cases: 1 (");
+      expect(stats).toContain("Patients: 1");
+      expect(stats).toContain("By specialty: Urology 1");
+      expect(await ask("complications this year")).toMatch(/^No complications are recorded/);
+    });
+
+    it("explains itself when it cannot match the question", async () => {
+      expect(await ask("help")).toBe(HELP_TEXT);
+      expect(await ask("")).toBe(HELP_TEXT);
+      const unknown = await ask("zzz qqq");
+      expect(unknown).toContain("I did not find a case, patient or topic");
+      expect(unknown).toContain(HELP_TEXT);
+    });
+
+    it("never uses the network or changes data", async () => {
+      const fetchSpy = vi.fn();
+      vi.stubGlobal("fetch", fetchSpy);
+      const count = async () =>
+        (await db.select<{ n: number }>("SELECT (SELECT COUNT(*) FROM audit_log) + (SELECT COUNT(*) FROM app_settings) AS n"))[0].n;
+      const before = await count();
+      for (const q of ["schedule tomorrow", "case-000101", "dela cruz", "not ready", "summary this year", "complications"]) {
+        await ask(q);
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(await count()).toBe(before);
+      vi.unstubAllGlobals();
     });
   });
 });

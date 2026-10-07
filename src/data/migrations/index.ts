@@ -3,6 +3,7 @@ import type { Db } from "../db";
 import { M001_INITIAL } from "./001_initial";
 import { M002_SEED } from "./002_seed";
 import { M003_AUTO_LOGIN } from "./003_workstation_auto_login";
+import { M004_REMOVE_ASSISTANT_SETTINGS } from "./004_remove_assistant_settings";
 
 export interface Migration {
   version: number;
@@ -15,6 +16,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 1, name: "initial_schema", sql: M001_INITIAL },
   { version: 2, name: "seed_reference_data", sql: M002_SEED },
   { version: 3, name: "workstation_auto_login", sql: M003_AUTO_LOGIN },
+  { version: 4, name: "remove_assistant_settings", sql: M004_REMOVE_ASSISTANT_SETTINGS },
 ];
 
 export interface MigrationResult {

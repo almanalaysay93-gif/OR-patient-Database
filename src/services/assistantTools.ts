@@ -4,137 +4,28 @@ import { getAnalyticsSummary } from "./analytics";
 import { computeReadiness, type ChecklistItemValue } from "./preOr";
 
 /**
- * Read-only data tools for the AI assistant.
+ * Read-only lookups behind the offline assistant.
  *
- * Everything returned from here is sent to an external model, so results are
- * de-identified: patients appear only as research IDs with age and sex. Names,
- * HRN, date of birth, address, contact number, admission number and free-text
- * notes never leave this module. Names are kept locally in the EntityMap so the
- * UI can show them next to the research ID.
+ * Results identify patients by research ID. Each lookup also fills an EntityMap with
+ * the matching local record, so the chat panel can turn research IDs and case numbers
+ * into links that show the patient's name.
  */
 
 export interface EntityRef {
   kind: "patient" | "case";
   patientId: string;
   caseId?: string;
-  /** Shown to the user only. Never sent to the model. */
+  /** Text shown on the link, e.g. the patient name. */
   label: string;
 }
 
-/** Token as it appears in model text (research ID or case number) -> local record. */
+/** Token as it appears in an answer (research ID or case number) -> local record. */
 export type EntityMap = Map<string, EntityRef>;
 
-export interface ToolDefinition {
-  type: "function";
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
-}
-
-const CASE_STATUSES = [
+export const CASE_STATUSES = [
   "PRE_OR", "NOT_READY", "READY", "SCHEDULED", "IN_OR", "PACU", "POST_OR", "COMPLETED", "POSTPONED", "CANCELLED",
 ];
 const CASE_TYPES = ["ELECTIVE", "EMERGENCY", "URGENT"];
-
-export const TOOL_DEFINITIONS: ToolDefinition[] = [
-  {
-    type: "function",
-    function: {
-      name: "get_or_schedule",
-      description:
-        "List every case on the operating room schedule for one date, ordered by start time, with room, times, status, delay and surgical team.",
-      parameters: {
-        type: "object",
-        properties: { date: { type: "string", description: "Date as YYYY-MM-DD" } },
-        required: ["date"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_cases",
-      description:
-        "Search surgical cases with optional filters. Returns the total match count and up to `limit` cases. Use for counts and lists such as cancelled cases, emergency cases or cases of one specialty.",
-      parameters: {
-        type: "object",
-        properties: {
-          status: { type: "string", enum: CASE_STATUSES },
-          case_type: { type: "string", enum: CASE_TYPES },
-          specialty: { type: "string", description: "Specialty name or part of it" },
-          procedure: { type: "string", description: "Text contained in the planned procedure" },
-          scheduled_from: { type: "string", description: "Earliest scheduled date, YYYY-MM-DD" },
-          scheduled_to: { type: "string", description: "Latest scheduled date, YYYY-MM-DD" },
-          limit: { type: "integer", description: "Maximum cases to return (default 50, max 200)" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_case",
-      description:
-        "Full record for one surgical case by case number: patient research ID, diagnoses, schedule, pre-operative checklist and readiness, intra-operative record, post-operative record, complications and team.",
-      parameters: {
-        type: "object",
-        properties: { case_number: { type: "string" } },
-        required: ["case_number"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "find_patient",
-      description:
-        "Look up patients by name, hospital record number or research ID. The match happens on the workstation; only research IDs, age and sex are returned.",
-      parameters: {
-        type: "object",
-        properties: { query: { type: "string" } },
-        required: ["query"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_patient",
-      description: "Admissions and surgical cases for one patient by research ID (for example OR-000012).",
-      parameters: {
-        type: "object",
-        properties: { research_id: { type: "string" } },
-        required: ["research_id"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_preor_readiness",
-      description:
-        "Pre-operative board: every case not yet in the operating room with its readiness percentage and the checklist items still pending or failed.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "get_analytics_summary",
-      description:
-        "Aggregate statistics: case volumes by status, type, specialty and procedure, patient age and sex distribution, post-operative destinations and complication rates. Dates filter on when the case was created.",
-      parameters: {
-        type: "object",
-        properties: {
-          start_date: { type: "string", description: "YYYY-MM-DD" },
-          end_date: { type: "string", description: "YYYY-MM-DD" },
-        },
-      },
-    },
-  },
-];
 
 type Args = Record<string, unknown>;
 
@@ -153,11 +44,8 @@ function dateArg(args: Args, key: string, required = false): string | undefined 
   return v;
 }
 
-/** Ages above 89 are grouped, as in Safe Harbor de-identification. */
-function safeAge(dob: string | null, refDate?: string | null): number | string | null {
-  const age = calculateAge(dob, refDate);
-  if (age == null) return null;
-  return age > 89 ? "90+" : age;
+function safeAge(dob: string | null, refDate?: string | null): number | null {
+  return calculateAge(dob, refDate);
 }
 
 const flag = (v: unknown): boolean | null => (v == null ? null : v === 1 || v === "1");
@@ -640,7 +528,7 @@ async function getPreOrReadiness(db: Db, entities: EntityMap) {
   };
 }
 
-/** Run one tool call. Throws with a message the model can read when the arguments are invalid. */
+/** Run one lookup by name. Throws a readable message when the arguments are invalid. */
 export async function executeTool(db: Db, name: string, args: Args, entities: EntityMap): Promise<unknown> {
   switch (name) {
     case "get_or_schedule":

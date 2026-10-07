@@ -2,18 +2,9 @@ import React, { useEffect, useState } from "react";
 import {
   Save,
   Download,
-  Bot,
-  PlugZap,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { getOrRooms, getSpecialties, type OrRoom, type Specialty } from "../services/masterData";
-import {
-  DEFAULT_MODEL,
-  SUGGESTED_MODELS,
-  getAssistantConfig,
-  saveAssistantConfig,
-  testAssistantConnection,
-} from "../services/assistant";
 
 export const SettingsView: React.FC = () => {
   const { db, theme, setTheme, visualEffects, setVisualEffects, notify } = useApp();
@@ -23,9 +14,6 @@ export const SettingsView: React.FC = () => {
   const [departmentName, setDepartmentName] = useState("Department of Surgery");
   const [schemaVersion, setSchemaVersion] = useState<number>(2);
   const [backupDir, setBackupDir] = useState<string | null>(null);
-  const [assistantKey, setAssistantKey] = useState("");
-  const [assistantModel, setAssistantModel] = useState(DEFAULT_MODEL);
-  const [testingKey, setTestingKey] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -44,9 +32,6 @@ export const SettingsView: React.FC = () => {
         if (deptRow[0]?.value) setDepartmentName(deptRow[0].value);
         if (migRow[0]?.v) setSchemaVersion(migRow[0].v);
         setBackupDir(db.backupDir);
-        const assistant = await getAssistantConfig(db);
-        setAssistantKey(assistant.apiKey);
-        setAssistantModel(assistant.model);
       } catch (err) {
         console.error(err);
       }
@@ -63,29 +48,6 @@ export const SettingsView: React.FC = () => {
       notify("Facility settings updated.", "success");
     } catch (err) {
       notify((err as Error).message, "error");
-    }
-  };
-
-  const handleSaveAssistant = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!db) return;
-    try {
-      await saveAssistantConfig(db, { apiKey: assistantKey, model: assistantModel });
-      notify(assistantKey.trim() ? "Assistant settings saved." : "Assistant API key removed.", "success");
-    } catch (err) {
-      notify((err as Error).message, "error");
-    }
-  };
-
-  const handleTestAssistant = async () => {
-    setTestingKey(true);
-    try {
-      await testAssistantConnection(assistantKey);
-      notify("OpenRouter accepted the API key.", "success");
-    } catch (err) {
-      notify((err as Error).message, "error");
-    } finally {
-      setTestingKey(false);
     }
   };
 
@@ -236,63 +198,6 @@ export const SettingsView: React.FC = () => {
             </div>
           </div>
         </div>
-
-        {/* AI Assistant */}
-        <form onSubmit={handleSaveAssistant} className="glass-card" style={{ gridColumn: "1 / -1", padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
-          <h2 style={{ fontSize: "16px", fontWeight: 700, borderBottom: "1px solid var(--border-glass)", paddingBottom: "10px", display: "flex", alignItems: "center", gap: "8px" }}>
-            <Bot size={16} />
-            <span>AI Assistant (OpenRouter)</span>
-          </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-            <div>
-              <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
-                OpenRouter API Key
-              </label>
-              <input
-                className="glass-input"
-                type="password"
-                autoComplete="off"
-                placeholder="sk-or-v1-..."
-                value={assistantKey}
-                onChange={(e) => setAssistantKey(e.target.value)}
-              />
-            </div>
-            <div>
-              <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
-                Model
-              </label>
-              <input
-                className="glass-input"
-                list="assistant-models"
-                placeholder={DEFAULT_MODEL}
-                value={assistantModel}
-                onChange={(e) => setAssistantModel(e.target.value)}
-              />
-              <datalist id="assistant-models">
-                {SUGGESTED_MODELS.map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
-            </div>
-          </div>
-          <p style={{ fontSize: "12px", lineHeight: 1.6, color: "var(--text-muted)" }}>
-            The assistant answers questions from this database and cannot change records. It needs an internet
-            connection; everything else keeps working offline. Sent to OpenRouter: research IDs, age, sex, procedures,
-            diagnoses, dates, statuses, staff names and the text of your question. Not sent: patient names, HRN, birth
-            date, address, contact number and free-text notes. The API key is stored unencrypted in the local database
-            and is included in database backups.
-          </p>
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-            <button type="button" onClick={handleTestAssistant} disabled={testingKey} className="glass-btn glass-btn-secondary" style={{ gap: "6px" }}>
-              <PlugZap size={14} />
-              <span>{testingKey ? "Testing..." : "Test Connection"}</span>
-            </button>
-            <button type="submit" className="glass-btn glass-btn-primary" style={{ gap: "6px" }}>
-              <Save size={14} />
-              <span>Save Assistant</span>
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   );

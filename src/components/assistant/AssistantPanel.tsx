@@ -1,13 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Bot, X, Send, Square, RotateCcw, User, FileText, ShieldCheck } from "lucide-react";
+import { Bot, X, Send, RotateCcw, User, FileText, ShieldCheck } from "lucide-react";
 import { useApp } from "../../context/AppContext";
-import {
-  AssistantError,
-  getAssistantConfig,
-  runAssistantTurn,
-  type ApiMessage,
-  type AssistantConfig,
-} from "../../services/assistant";
+import { answerQuestion } from "../../services/assistant";
 import type { EntityMap, EntityRef } from "../../services/assistantTools";
 
 interface DisplayMessage {
@@ -17,15 +11,16 @@ interface DisplayMessage {
 }
 
 const SUGGESTIONS = [
-  "What is on the OR schedule today?",
-  "Which cases are not ready for surgery yet?",
-  "How many cases were cancelled this month?",
-  "Summarize complications recorded this year.",
+  "Schedule today",
+  "Which cases are not ready?",
+  "Cancelled cases this month",
+  "Complications this year",
+  "Help",
 ];
 
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** Bold, inline code, and research IDs / case numbers known from tool results. */
+/** Bold, inline code, and research IDs / case numbers known from earlier lookups. */
 function inlinePattern(entities: EntityMap): RegExp {
   const tokens = [...entities.keys()].sort((a, b) => b.length - a.length).map(escapeRegex);
   const parts = ["\\*\\*([^*]+)\\*\\*", "`([^`]+)`"];
@@ -88,7 +83,7 @@ function renderInline(text: string, entities: EntityMap, onOpen: (e: EntityRef) 
   return out;
 }
 
-/** Minimal renderer for the paragraphs and bullet lists the assistant is asked to write. */
+/** Minimal renderer for the paragraphs and bullet lists the assistant writes. */
 const MessageBody: React.FC<{ text: string; entities: EntityMap; onOpen: (e: EntityRef) => void }> = ({
   text,
   entities,
@@ -130,7 +125,6 @@ const MessageBody: React.FC<{ text: string; entities: EntityMap; onOpen: (e: Ent
 export const AssistantPanel: React.FC = () => {
   const {
     db,
-    session,
     assistantOpen,
     setAssistantOpen,
     searchOpen,
@@ -138,13 +132,10 @@ export const AssistantPanel: React.FC = () => {
     setSelectedCaseId,
     setView,
   } = useApp();
-  const [config, setConfig] = useState<AssistantConfig | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  const historyRef = useRef<ApiMessage[]>([]);
   const entitiesRef = useRef<EntityMap>(new Map());
-  const abortRef = useRef<AbortController | null>(null);
   const nextIdRef = useRef(1);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -162,12 +153,9 @@ export const AssistantPanel: React.FC = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [assistantOpen, searchOpen, setAssistantOpen]);
 
-  // Re-read the key every time the panel opens so a change in Settings is picked up.
   useEffect(() => {
-    if (!db || !assistantOpen) return;
-    getAssistantConfig(db).then(setConfig).catch(console.error);
-    inputRef.current?.focus();
-  }, [db, assistantOpen]);
+    if (assistantOpen) inputRef.current?.focus();
+  }, [assistantOpen]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -180,42 +168,21 @@ export const AssistantPanel: React.FC = () => {
 
   const send = async (text: string) => {
     const question = text.trim();
-    if (!db || !config || !question || busy) return;
+    if (!db || !question || busy) return;
     setInput("");
     addMessage("user", question);
     setBusy(true);
-    const controller = new AbortController();
-    abortRef.current = controller;
     try {
-      const result = await runAssistantTurn({
-        db,
-        config,
-        history: historyRef.current,
-        userText: question,
-        entities: entitiesRef.current,
-        userId: session?.userId,
-        signal: controller.signal,
-      });
-      historyRef.current = result.history;
-      addMessage("assistant", result.reply);
+      addMessage("assistant", await answerQuestion(db, question, entitiesRef.current));
     } catch (err) {
-      if ((err as Error).name === "AbortError") {
-        addMessage("error", "Stopped.");
-      } else if (err instanceof AssistantError) {
-        addMessage("error", err.message);
-      } else {
-        console.error("Assistant error:", err);
-        addMessage("error", "Something went wrong while answering. Try again.");
-      }
+      console.error("Assistant error:", err);
+      addMessage("error", "Something went wrong while looking that up. Try again.");
     } finally {
-      abortRef.current = null;
       setBusy(false);
     }
   };
 
   const newChat = () => {
-    abortRef.current?.abort();
-    historyRef.current = [];
     entitiesRef.current = new Map();
     setMessages([]);
   };
@@ -228,11 +195,6 @@ export const AssistantPanel: React.FC = () => {
     } else {
       setView("patients");
     }
-  };
-
-  const openSettings = () => {
-    setView("settings");
-    setAssistantOpen(false);
   };
 
   const iconButton: React.CSSProperties = {
@@ -270,7 +232,7 @@ export const AssistantPanel: React.FC = () => {
         </div>
         <div style={{ flex: 1, lineHeight: 1.2 }}>
           <div style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-main)" }}>Assistant</div>
-          <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Read-only &bull; {config?.model ?? "…"}</div>
+          <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Read-only &bull; Offline &bull; Local database</div>
         </div>
         <button onClick={newChat} title="New chat" style={iconButton}>
           <RotateCcw size={16} />
@@ -282,22 +244,10 @@ export const AssistantPanel: React.FC = () => {
 
       {/* Conversation */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-        {config && !config.apiKey && (
-          <div className="glass-card" style={{ padding: "14px", fontSize: "13px", lineHeight: 1.5, color: "var(--text-main)" }}>
-            <strong>Set up the assistant</strong>
-            <p style={{ margin: "6px 0 10px", color: "var(--text-muted)" }}>
-              The assistant uses OpenRouter and needs an API key. Add one in Settings to start asking questions.
-            </p>
-            <button onClick={openSettings} className="glass-btn glass-btn-primary" style={{ fontSize: "12px" }}>
-              Open Settings
-            </button>
-          </div>
-        )}
-
-        {config?.apiKey && messages.length === 0 && (
+        {messages.length === 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             <div style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "4px" }}>
-              Ask about the schedule, case status, readiness, delays or statistics.
+              Ask about the schedule, a case number, a patient, readiness, delays or statistics.
             </div>
             {SUGGESTIONS.map((s) => (
               <button
@@ -352,7 +302,6 @@ export const AssistantPanel: React.FC = () => {
             rows={2}
             placeholder="Ask a question…"
             value={input}
-            disabled={!config?.apiKey}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -362,27 +311,21 @@ export const AssistantPanel: React.FC = () => {
             }}
             style={{ flex: 1, resize: "none", fontSize: "13px", fontFamily: "inherit" }}
           />
-          {busy ? (
-            <button onClick={() => abortRef.current?.abort()} title="Stop" className="glass-btn glass-btn-secondary" style={{ padding: "10px" }}>
-              <Square size={15} />
-            </button>
-          ) : (
-            <button
-              onClick={() => send(input)}
-              title="Send (Enter)"
-              disabled={!config?.apiKey || !input.trim()}
-              className="glass-btn glass-btn-primary"
-              style={{ padding: "10px" }}
-            >
-              <Send size={15} />
-            </button>
-          )}
+          <button
+            onClick={() => send(input)}
+            title="Send (Enter)"
+            disabled={busy || !input.trim()}
+            className="glass-btn glass-btn-primary"
+            style={{ padding: "10px" }}
+          >
+            <Send size={15} />
+          </button>
         </div>
         <div style={{ display: "flex", gap: "6px", marginTop: "8px", fontSize: "11px", lineHeight: 1.4, color: "var(--text-muted)" }}>
           <ShieldCheck size={13} style={{ flexShrink: 0, marginTop: "1px" }} />
           <span>
-            Patient names, HRNs and birth dates are not sent to the AI service. Answers can be wrong; check the record
-            before acting. Not clinical advice.
+            Works offline with keyword rules. Nothing leaves this computer. Check the record before acting. Not
+            clinical advice.
           </span>
         </div>
       </div>

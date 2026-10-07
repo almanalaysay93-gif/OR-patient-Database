@@ -8,11 +8,12 @@ describe("Database migrations", () => {
     const result = await runMigrations(db);
 
     expect(result.fromVersion).toBe(0);
-    expect(result.toVersion).toBe(3);
+    expect(result.toVersion).toBe(4);
     expect(result.applied).toEqual([
       "1_initial_schema",
       "2_seed_reference_data",
       "3_workstation_auto_login",
+      "4_remove_assistant_settings",
     ]);
 
     // Check roles
