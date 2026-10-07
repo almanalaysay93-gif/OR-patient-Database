@@ -6,6 +6,8 @@ import path from "node:path";
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
+  // The desktop app is served from the root; the GitHub Pages preview sets VITE_BASE to its sub-path.
+  base: process.env.VITE_BASE || "/",
   plugins: [react()],
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
   clearScreen: false,

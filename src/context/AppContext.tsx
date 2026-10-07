@@ -80,7 +80,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           database = await openTauriDb();
         } else {
           // Dev / browser preview fallback using sql.js + IndexedDB (offline local wasm)
-          const wasmUrl = "/sql-wasm.wasm";
+          const wasmUrl = `${import.meta.env.BASE_URL}sql-wasm.wasm`;
           database = await openBrowserDb(wasmUrl);
         }
 

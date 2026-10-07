@@ -102,7 +102,7 @@ export const HyperFramesGuideModal: React.FC = () => {
         <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 9", background: "#0f172a" }}>
           <video
             ref={videoRef}
-            src="/videos/onboarding.mp4"
+            src={`${import.meta.env.BASE_URL}videos/onboarding.mp4`}
             autoPlay
             loop
             muted={false}
