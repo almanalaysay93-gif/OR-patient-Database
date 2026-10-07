@@ -4,6 +4,7 @@ import { Sidebar } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
 import { SetupWizard } from "./components/setup/SetupWizard";
 import { GlobalSearchModal } from "./components/common/GlobalSearchModal";
+import { AssistantPanel } from "./components/assistant/AssistantPanel";
 import { HyperFramesGuideModal } from "./components/video/HyperFramesGuideModal";
 
 // Views
@@ -45,6 +46,7 @@ const MainLayout: React.FC = () => {
 
       {/* Global Modals */}
       <GlobalSearchModal />
+      <AssistantPanel />
       <HyperFramesGuideModal />
 
       {/* Toast Notification */}

@@ -31,6 +31,7 @@ interface AppContextValue {
   visualEffects: VisualEffectsMode;
   videoGuideOpen: boolean;
   searchOpen: boolean;
+  assistantOpen: boolean;
   // Actions
   setView: (v: NavView) => void;
   setSelectedPatientId: (id: string | null) => void;
@@ -39,6 +40,7 @@ interface AppContextValue {
   setVisualEffects: (mode: VisualEffectsMode) => void;
   setVideoGuideOpen: (open: boolean) => void;
   setSearchOpen: (open: boolean) => void;
+  setAssistantOpen: (open: boolean) => void;
   onLoginSuccess: (s: UserSession) => void;
   onLogout: () => void;
   refreshSetupStatus: () => Promise<void>;
@@ -61,6 +63,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [visualEffects, setVisualEffectsState] = useState<VisualEffectsMode>("FULL");
   const [videoGuideOpen, setVideoGuideOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "info" | "success" | "warning" | "error" } | null>(null);
 
   const notify = (message: string, type: "info" | "success" | "warning" | "error" = "info") => {
@@ -162,6 +165,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         visualEffects,
         videoGuideOpen,
         searchOpen,
+        assistantOpen,
         setView: setCurrentView,
         setSelectedPatientId,
         setSelectedCaseId,
@@ -169,6 +173,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setVisualEffects,
         setVideoGuideOpen,
         setSearchOpen,
+        setAssistantOpen,
         onLoginSuccess,
         onLogout,
         refreshSetupStatus,

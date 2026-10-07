@@ -9,3 +9,8 @@ src-tauri/gen/
 .env.*
 coverage/
 video/**/renders/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+__pycache__/

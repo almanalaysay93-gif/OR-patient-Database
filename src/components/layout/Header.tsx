@@ -1,6 +1,7 @@
 import React from "react";
 import {
   Search,
+  Bot,
   Sun,
   Moon,
   Sparkles,
@@ -18,6 +19,8 @@ export const Header: React.FC = () => {
     visualEffects,
     setVisualEffects,
     setSearchOpen,
+    assistantOpen,
+    setAssistantOpen,
     onLogout,
   } = useApp();
 
@@ -59,6 +62,17 @@ export const Header: React.FC = () => {
 
       {/* Right Controls */}
       <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        {/* AI Assistant */}
+        <button
+          onClick={() => setAssistantOpen(!assistantOpen)}
+          title="Ask the assistant (Ctrl+J)"
+          className={`glass-btn ${assistantOpen ? "glass-btn-primary" : "glass-btn-secondary"}`}
+          style={{ padding: "6px 12px", fontSize: "12px", gap: "6px" }}
+        >
+          <Bot size={14} />
+          <span>Assistant</span>
+        </button>
+
         {/* Performance Mode Switch */}
         <button
           onClick={cycleEffects}
