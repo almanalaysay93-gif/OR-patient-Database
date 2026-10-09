@@ -9,19 +9,18 @@ import { useApp } from "../context/AppContext";
 import {
   getScheduleByDate,
   scheduleCase,
-  updateActualTimes,
   checkSchedulingConflicts,
   type ScheduleItem,
   type SchedulingConflict,
 } from "../services/scheduling";
-import { getOrRooms, getDelayReasons, type OrRoom, type NamedEntity } from "../services/masterData";
+import { getOrRooms, type OrRoom } from "../services/masterData";
+import { CaseEventsPanel } from "../components/clinical/CaseEventsPanel";
 
 export const ScheduleView: React.FC = () => {
   const { db, setView, setSelectedPatientId, setSelectedCaseId, notify } = useApp();
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [rooms, setRooms] = useState<OrRoom[]>([]);
-  const [delayReasons, setDelayReasons] = useState<NamedEntity[]>([]);
 
   // New Schedule Modal
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
@@ -34,24 +33,16 @@ export const ScheduleView: React.FC = () => {
 
   // Update Timestamps modal
   const [timestampModalItem, setTimestampModalItem] = useState<ScheduleItem | null>(null);
-  const [actualRoomIn, setActualRoomIn] = useState("");
-  const [actualProcStart, setActualProcStart] = useState("");
-  const [actualProcEnd, setActualProcEnd] = useState("");
-  const [actualRoomOut, setActualRoomOut] = useState("");
-  const [delayMins, setDelayMins] = useState<number>(0);
-  const [delayReasonId, setDelayReasonId] = useState("");
 
   const loadData = async () => {
     if (!db) return;
     try {
-      const [schedList, roomList, delayList] = await Promise.all([
+      const [schedList, roomList] = await Promise.all([
         getScheduleByDate(db, date),
         getOrRooms(db),
-        getDelayReasons(db),
       ]);
       setSchedules(schedList);
       setRooms(roomList);
-      setDelayReasons(delayList);
       if (roomList.length > 0 && !schedRoomId) setSchedRoomId(roomList[0].or_room_id);
     } catch (err) {
       console.error(err);
@@ -124,37 +115,8 @@ export const ScheduleView: React.FC = () => {
     }
   };
 
-  const handleSaveTimestamps = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!db || !timestampModalItem) return;
-
-    try {
-      await updateActualTimes(db, {
-        scheduleId: timestampModalItem.schedule_id,
-        actualRoomIn: actualRoomIn || null,
-        actualProcedureStart: actualProcStart || null,
-        actualProcedureEnd: actualProcEnd || null,
-        actualRoomOut: actualRoomOut || null,
-        delayMinutes: delayMins || null,
-        delayReasonId: delayReasonId || null,
-      });
-
-      notify("Operative timestamps recorded.", "success");
-      setTimestampModalItem(null);
-      await loadData();
-    } catch (err) {
-      notify((err as Error).message, "error");
-    }
-  };
-
   const openTimestampModal = (s: ScheduleItem) => {
     setTimestampModalItem(s);
-    setActualRoomIn(s.actual_room_in || "");
-    setActualProcStart(s.actual_procedure_start || "");
-    setActualProcEnd(s.actual_procedure_end || "");
-    setActualRoomOut(s.actual_room_out || "");
-    setDelayMins(s.delay_minutes || 0);
-    setDelayReasonId(s.delay_reason_id || "");
   };
 
   return (
@@ -253,7 +215,7 @@ export const ScheduleView: React.FC = () => {
                           style={{ fontSize: "11px", padding: "4px 8px" }}
                         >
                           <Clock size={12} />
-                          <span>Times / Delays</span>
+                          <span>OR events</span>
                         </button>
                         <button
                           onClick={() => {
@@ -351,58 +313,16 @@ export const ScheduleView: React.FC = () => {
         </div>
       )}
 
-      {/* Modal: Update Timestamps & Delays */}
+      {/* Modal: dated case events */}
       {timestampModalItem && (
         <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-          <div className="glass-card" style={{ width: "100%", maxWidth: "560px", padding: "28px" }}>
+          <div className="glass-card" style={{ width: "100%", maxWidth: "700px", maxHeight: "85vh", overflowY: "auto", padding: "28px" }}>
             <h2 style={{ fontSize: "18px", fontWeight: 800, marginBottom: "16px" }}>
-              Room Timestamps & Turnover: {timestampModalItem.case_number}
+              OR events: {timestampModalItem.case_number}
             </h2>
-            <form onSubmit={handleSaveTimestamps} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600 }}>Actual Room In</label>
-                  <input className="glass-input" type="time" value={actualRoomIn} onChange={(e) => setActualRoomIn(e.target.value)} />
-                </div>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600 }}>Actual Procedure Start</label>
-                  <input className="glass-input" type="time" value={actualProcStart} onChange={(e) => setActualProcStart(e.target.value)} />
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600 }}>Actual Procedure End</label>
-                  <input className="glass-input" type="time" value={actualProcEnd} onChange={(e) => setActualProcEnd(e.target.value)} />
-                </div>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600 }}>Actual Room Out</label>
-                  <input className="glass-input" type="time" value={actualRoomOut} onChange={(e) => setActualRoomOut(e.target.value)} />
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600 }}>Delay (Minutes)</label>
-                  <input className="glass-input" type="number" min="0" value={delayMins} onChange={(e) => setDelayMins(parseInt(e.target.value, 10) || 0)} />
-                </div>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600 }}>Delay Reason</label>
-                  <select className="glass-input" value={delayReasonId} onChange={(e) => setDelayReasonId(e.target.value)}>
-                    <option value="">None / On Time</option>
-                    {delayReasons.map((r) => (
-                      <option key={r.id} value={r.id}>{r.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "10px" }}>
-                <button type="button" onClick={() => setTimestampModalItem(null)} className="glass-btn glass-btn-secondary">
-                  Cancel
-                </button>
-                <button type="submit" className="glass-btn glass-btn-primary">
-                  Save Timestamps
-                </button>
-              </div>
-            </form>
+            <CaseEventsPanel caseId={timestampModalItem.case_id} />
+            <button type="button" onClick={() => setTimestampModalItem(null)} className="glass-btn glass-btn-secondary"
+              style={{ marginTop: 12 }}>Close</button>
           </div>
         </div>
       )}

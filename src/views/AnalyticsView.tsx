@@ -168,6 +168,17 @@ export const AnalyticsView: React.FC = () => {
         </div>
       </div>
 
+      <div className="glass-card" style={{ padding: 20 }}>
+        <h2 style={{ fontSize: 17, marginTop: 0 }}>Coding and 30-day follow-up</h2>
+        <p>{summary.uncodedCases} of {summary.totalCases} cases have no coded procedure.</p>
+        <p>{summary.followup30.assessed} of {summary.followup30.eligible} completed cases have an assessed 30-day follow-up.
+          {summary.followup30.unreachable} were unreachable and {summary.followup30.pending} remain pending or unrecorded.</p>
+        <p>Recorded outcome cases: {summary.followup30.readmissions} readmissions,
+          {" "}{summary.followup30.reoperations} unplanned reoperations,
+          {" "}{summary.followup30.deaths} deaths, and {summary.followup30.infections} surgical site infections.</p>
+        <small>These counts use completed cases as the denominator. Missing follow-up is not a negative outcome.</small>
+      </div>
+
       {/* Row 2: Demographics Section (Age Curve + Sex Distribution) */}
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "24px" }}>
         {/* Age Distribution Chart */}

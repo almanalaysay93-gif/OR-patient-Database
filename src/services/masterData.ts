@@ -1,5 +1,6 @@
 import type { Db } from "../data/db";
 import { uuid, nowIso } from "../data/db";
+import { logAudit } from "./audit";
 
 export interface MasterItem {
   id: string;
@@ -21,6 +22,7 @@ export interface Specialty {
 export interface Procedure {
   procedure_id: string;
   procedure_code: string | null;
+  code_system: string | null;
   procedure_name: string;
   specialty_id: string | null;
   category: string | null;
@@ -32,6 +34,7 @@ export interface Procedure {
 export interface Diagnosis {
   diagnosis_id: string;
   diagnosis_code: string | null;
+  code_system: string | null;
   diagnosis_name: string;
   category: string | null;
   active: number;
@@ -86,6 +89,44 @@ export async function getProcedures(db: Db, onlyActive = true): Promise<Procedur
 export async function getDiagnoses(db: Db, onlyActive = true): Promise<Diagnosis[]> {
   const sql = `SELECT * FROM diagnoses ${onlyActive ? "WHERE active = 1" : ""} ORDER BY diagnosis_name`;
   return db.select<Diagnosis>(sql);
+}
+
+export async function createProcedure(
+  db: Db, params: { name: string; code?: string | null; codeSystem?: string | null; userId?: string | null },
+): Promise<Procedure> {
+  const name = params.name.trim();
+  if (!name) throw new Error("Procedure name is required.");
+  const id = uuid();
+  const now = nowIso();
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      `INSERT INTO procedures
+       (procedure_id, procedure_code, procedure_name, code_system, active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 1, ?, ?)`,
+      [id, params.code?.trim() || null, name, params.codeSystem?.trim() || null, now, now]);
+    await logAudit(tx, { userId: params.userId, action: "CREATE_PROCEDURE", entityType: "PROCEDURE",
+      recordId: id, newValue: JSON.stringify({ name, code: params.code || null, system: params.codeSystem || null }) });
+  });
+  return (await db.select<Procedure>("SELECT * FROM procedures WHERE procedure_id = ?", [id]))[0];
+}
+
+export async function createDiagnosis(
+  db: Db, params: { name: string; code?: string | null; codeSystem?: string | null; userId?: string | null },
+): Promise<Diagnosis> {
+  const name = params.name.trim();
+  if (!name) throw new Error("Diagnosis name is required.");
+  const id = uuid();
+  const now = nowIso();
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      `INSERT INTO diagnoses
+       (diagnosis_id, diagnosis_code, diagnosis_name, code_system, active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 1, ?, ?)`,
+      [id, params.code?.trim() || null, name, params.codeSystem?.trim() || null, now, now]);
+    await logAudit(tx, { userId: params.userId, action: "CREATE_DIAGNOSIS", entityType: "DIAGNOSIS",
+      recordId: id, newValue: JSON.stringify({ name, code: params.code || null, system: params.codeSystem || null }) });
+  });
+  return (await db.select<Diagnosis>("SELECT * FROM diagnoses WHERE diagnosis_id = ?", [id]))[0];
 }
 
 export async function getOrRooms(db: Db, onlyActive = true): Promise<OrRoom[]> {

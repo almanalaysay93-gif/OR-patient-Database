@@ -3,17 +3,22 @@ import { openMemoryDb } from "../sqljs-adapter";
 import { runMigrations } from "./index";
 
 describe("Database migrations", () => {
-  it("applies migrations 001 and 002 cleanly on in-memory SQLite", async () => {
+  it("applies every migration cleanly on in-memory SQLite", async () => {
     const db = await openMemoryDb();
     const result = await runMigrations(db);
 
     expect(result.fromVersion).toBe(0);
-    expect(result.toVersion).toBe(4);
+    expect(result.toVersion).toBe(9);
     expect(result.applied).toEqual([
       "1_initial_schema",
       "2_seed_reference_data",
       "3_workstation_auto_login",
       "4_remove_assistant_settings",
+      "5_case_coding",
+      "6_preop_baseline",
+      "7_safety_phases",
+      "8_case_events",
+      "9_followup",
     ]);
 
     // Check roles

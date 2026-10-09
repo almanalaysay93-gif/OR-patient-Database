@@ -21,6 +21,7 @@ import {
 } from "../services/patients";
 import { getSpecialties, type Specialty } from "../services/masterData";
 import { getAuditHistory, type AuditEntry } from "../services/audit";
+import { CaseCodingPanel } from "../components/clinical/CaseCodingPanel";
 
 export const PatientsView: React.FC = () => {
   const { db, selectedPatientId, setSelectedPatientId, setSelectedCaseId, setView, notify } = useApp();
@@ -42,9 +43,9 @@ export const PatientsView: React.FC = () => {
   const [ln, setLn] = useState("");
   const [mn, setMn] = useState("");
   const [hrn, setHrn] = useState("");
-  const [dob, setDob] = useState("1985-05-15");
-  const [sex, setSex] = useState<"MALE" | "FEMALE">("MALE");
-  const [bloodType, setBloodType] = useState("O+");
+  const [dob, setDob] = useState("");
+  const [sex, setSex] = useState<"MALE" | "FEMALE" | "OTHER" | "UNKNOWN" | "">("");
+  const [bloodType, setBloodType] = useState("");
   const [contact, setContact] = useState("");
 
   // Create Case modal
@@ -55,6 +56,7 @@ export const PatientsView: React.FC = () => {
   const [specialtyId, setSpecialtyId] = useState("");
   const [procedureSummary, setProcedureSummary] = useState("");
   const [laterality, setLaterality] = useState<"LEFT" | "RIGHT" | "BILATERAL" | "NOT_APPLICABLE">("NOT_APPLICABLE");
+  const [codingCaseId, setCodingCaseId] = useState<string | null>(null);
 
   const loadList = async () => {
     if (!db) return;
@@ -123,8 +125,8 @@ export const PatientsView: React.FC = () => {
         middleName: mn,
         hrn: hrn || null,
         dateOfBirth: dob || null,
-        sex,
-        bloodType,
+        sex: sex || null,
+        bloodType: bloodType || null,
         contactNumber: contact,
       });
 
@@ -140,6 +142,9 @@ export const PatientsView: React.FC = () => {
       setFn("");
       setLn("");
       setHrn("");
+      setDob("");
+      setSex("");
+      setBloodType("");
       await loadList();
       setSelectedPatientId(p.patient_id);
     } catch (err) {
@@ -374,16 +379,20 @@ export const PatientsView: React.FC = () => {
                         {c.planned_procedure_summary || "Procedure summary pending"}
                       </div>
                     </div>
-                    <button
-                      onClick={() => {
-                        setSelectedCaseId(c.case_id);
-                        setView("preor");
-                      }}
-                      className="glass-btn glass-btn-secondary"
-                      style={{ fontSize: "12px" }}
-                    >
-                      Pre-OR Check &rarr;
-                    </button>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => setCodingCaseId(c.case_id)} className="glass-btn glass-btn-secondary"
+                        style={{ fontSize: "12px" }}>Code case</button>
+                      <button
+                        onClick={() => {
+                          setSelectedCaseId(c.case_id);
+                          setView("preor");
+                        }}
+                        className="glass-btn glass-btn-secondary"
+                        style={{ fontSize: "12px" }}
+                      >
+                        Pre-OR Check &rarr;
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -480,8 +489,11 @@ export const PatientsView: React.FC = () => {
                 <div>
                   <label style={{ fontSize: "12px", fontWeight: 600 }}>Sex</label>
                   <select className="glass-input" value={sex} onChange={(e) => setSex(e.target.value as any)}>
+                    <option value="">Not recorded</option>
                     <option value="MALE">Male</option>
                     <option value="FEMALE">Female</option>
+                    <option value="OTHER">Other</option>
+                    <option value="UNKNOWN">Unknown</option>
                   </select>
                 </div>
                 <div>
@@ -569,6 +581,15 @@ export const PatientsView: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {codingCaseId && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15, 23, 42, 0.6)",
+          overflowY: "auto", padding: 24 }}>
+          <div style={{ maxWidth: 720, margin: "0 auto" }}>
+            <button type="button" className="glass-btn glass-btn-secondary" onClick={() => setCodingCaseId(null)}>Close coding</button>
+            <CaseCodingPanel caseId={codingCaseId} />
           </div>
         </div>
       )}

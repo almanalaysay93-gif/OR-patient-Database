@@ -11,9 +11,11 @@ import {
   type ChecklistItemValue,
   type ReadinessCalculation,
 } from "../services/preOr";
+import { PreopBaselinePanel } from "../components/clinical/PreopBaselinePanel";
+import { SafetyPhasesPanel } from "../components/clinical/SafetyPhasesPanel";
 
 export const PreOrView: React.FC = () => {
-  const { db, selectedCaseId, setSelectedCaseId, setSelectedPatientId, setView, notify } = useApp();
+  const { db, session, selectedCaseId, setSelectedCaseId, setSelectedPatientId, setView, notify } = useApp();
   const [boardCases, setBoardCases] = useState<any[]>([]);
   const [activeChecklistCase, setActiveChecklistCase] = useState<any | null>(null);
   const [checklistItems, setChecklistItems] = useState<ChecklistItemValue[]>([]);
@@ -61,6 +63,7 @@ export const PreOrView: React.FC = () => {
         caseId: selectedCaseId,
         checklistItemId: itemId,
         status,
+        userId: session?.userId,
       });
       setReadiness(updated);
       const res = await getPreOrChecklist(db, selectedCaseId);
@@ -240,7 +243,7 @@ export const PreOrView: React.FC = () => {
                   </div>
                   <div style={{ fontSize: "12px", color: "var(--text-main)", marginTop: "2px" }}>
                     {readiness.isReady ? (
-                      "All applicable pre-operative milestones verified. Patient cleared for OR."
+                      "Pre-OR milestones complete. Review surgical safety phases separately."
                     ) : (
                       <span>Missing: <strong>{readiness.missingItems.join(", ") || "None"}</strong></span>
                     )}
@@ -310,6 +313,9 @@ export const PreOrView: React.FC = () => {
                 </div>
               ))}
             </div>
+
+            {selectedCaseId && <PreopBaselinePanel caseId={selectedCaseId} />}
+            {selectedCaseId && <SafetyPhasesPanel caseId={selectedCaseId} />}
 
             <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border-glass)", paddingTop: "16px" }}>
               <button

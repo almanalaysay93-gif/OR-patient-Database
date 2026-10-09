@@ -366,6 +366,11 @@ export async function createSurgicalCase(
       [uuid(), caseId, now, now]
     );
 
+    await tx.execute(
+      "INSERT INTO case_safety_templates (case_id, template_id, assigned_at) VALUES (?, 'who-2009-local', ?)",
+      [caseId, now]
+    );
+
     await logAudit(tx, {
       userId: params.userId,
       patientId: params.patientId,

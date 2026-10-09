@@ -24,6 +24,7 @@ import {
   getPostOrRecord,
 } from "./intraPostOr";
 import { getAnalyticsSummary } from "./analytics";
+import { saveCaseEvent } from "./caseEvents";
 
 describe("Services & Domain Logic Suite", () => {
   let db: Db;
@@ -230,6 +231,9 @@ describe("Services & Domain Logic Suite", () => {
       const post = await getPostOrRecord(db, c1.case_id);
       expect(post?.pain_score).toBe(3);
 
+      await saveCaseEvent(db, {
+        caseId: c1.case_id, eventType: "INCISION", occurredAt: "2026-10-07T09:00:00Z",
+      });
       await completeCase(db, c1.case_id);
 
       const summary = await getAnalyticsSummary(db);

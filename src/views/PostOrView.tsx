@@ -19,20 +19,21 @@ import {
   getComplicationTypes,
   type NamedEntity,
 } from "../services/masterData";
+import { CaseEventsPanel } from "../components/clinical/CaseEventsPanel";
+import { FollowupPanel } from "../components/clinical/FollowupPanel";
+import { getFollowupQueue } from "../services/followup";
 
 export const PostOrView: React.FC = () => {
-  const { db, selectedCaseId, notify } = useApp();
+  const { db, session, selectedCaseId, setSelectedCaseId, notify } = useApp();
   const [surgicalCase, setSurgicalCase] = useState<SurgicalCase | null>(null);
   const [destinations, setDestinations] = useState<NamedEntity[]>([]);
   const [complicationTypes, setComplicationTypes] = useState<any[]>([]);
   const [complications, setComplications] = useState<ComplicationRecord[]>([]);
 
   // Post-OR record form
-  const [pacuIn, setPacuIn] = useState("");
-  const [pacuOut, setPacuOut] = useState("");
   const [destinationId, setDestinationId] = useState("");
-  const [postOpStatus, setPostOpStatus] = useState("Stable");
-  const [painScore, setPainScore] = useState<number>(2);
+  const [postOpStatus, setPostOpStatus] = useState("");
+  const [painScore, setPainScore] = useState("");
   const [complicationsPresent, setComplicationsPresent] = useState(false);
   const [icuRequired, setIcuRequired] = useState(false);
   const [reopRequired, setReopRequired] = useState(false);
@@ -45,7 +46,12 @@ export const PostOrView: React.FC = () => {
   const [compSeverity, setCompSeverity] = useState<"MINOR" | "MODERATE" | "SEVERE" | "LIFE_THREATENING">("MINOR");
   const [compDesc, setCompDesc] = useState("");
   const [compIntervention, setCompIntervention] = useState("");
-  const [compOutcome, setCompOutcome] = useState("Resolved");
+  const [compOutcome, setCompOutcome] = useState("");
+  const [followupQueue, setFollowupQueue] = useState<Awaited<ReturnType<typeof getFollowupQueue>>>([]);
+
+  useEffect(() => {
+    if (db) getFollowupQueue(db).then(setFollowupQueue).catch(console.error);
+  }, [db, selectedCaseId]);
 
   useEffect(() => {
     async function load() {
@@ -64,11 +70,9 @@ export const PostOrView: React.FC = () => {
         setComplications(compList);
 
         if (post) {
-          setPacuIn(post.pacu_admission || "");
-          setPacuOut(post.pacu_discharge || "");
           setDestinationId(post.post_op_destination_id || "");
-          setPostOpStatus(post.post_op_status || "Stable");
-          setPainScore(post.pain_score ?? 2);
+          setPostOpStatus(post.post_op_status || "");
+          setPainScore(post.pain_score?.toString() || "");
           setComplicationsPresent(post.complications_present === 1 || compList.length > 0);
           setIcuRequired(post.icu_required === 1);
           setReopRequired(post.reoperation_required === 1);
@@ -89,16 +93,15 @@ export const PostOrView: React.FC = () => {
     try {
       await savePostOrRecord(db, {
         caseId: selectedCaseId,
-        pacuAdmission: pacuIn || null,
-        pacuDischarge: pacuOut || null,
         postOpDestinationId: destinationId || null,
-        postOpStatus,
-        painScore,
+        postOpStatus: postOpStatus || null,
+        painScore: painScore ? Number(painScore) : null,
         complicationsPresent: complicationsPresent || complications.length > 0,
         icuRequired,
         reoperationRequired: reopRequired,
         mortality,
         notes,
+        userId: session?.userId,
       });
 
       notify("Post-OR / PACU record updated.", "success");
@@ -119,6 +122,7 @@ export const PostOrView: React.FC = () => {
         description: compDesc,
         intervention: compIntervention,
         outcome: compOutcome,
+        userId: session?.userId,
       });
 
       setCompModalOpen(false);
@@ -141,7 +145,7 @@ export const PostOrView: React.FC = () => {
     }
 
     try {
-      await completeCase(db, selectedCaseId);
+      await completeCase(db, selectedCaseId, session?.userId);
       notify("Surgical case successfully completed!", "success");
       const c = await getCaseById(db, selectedCaseId);
       setSurgicalCase(c);
@@ -152,8 +156,15 @@ export const PostOrView: React.FC = () => {
 
   if (!selectedCaseId || !surgicalCase) {
     return (
-      <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
-        Select a patient case from the Dashboard or Patients registry to view Post-OR records.
+      <div style={{ padding: 32 }}>
+        <h1>Postoperative follow-up queue</h1>
+        {followupQueue.map((item) => (
+          <button key={item.case_id} type="button" className="glass-btn glass-btn-secondary"
+            style={{ display: "block", marginTop: 8 }} onClick={() => setSelectedCaseId(item.case_id)}>
+            {item.case_number}: {item.patient_name} - {item.status} {item.due_date || "Date needed"}
+          </button>
+        ))}
+        {followupQueue.length === 0 && <p>Select a case from Patients or Schedule.</p>}
       </div>
     );
   }
@@ -214,21 +225,6 @@ export const PostOrView: React.FC = () => {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
             <div>
               <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
-                PACU Admission Time
-              </label>
-              <input type="time" className="glass-input" value={pacuIn} onChange={(e) => setPacuIn(e.target.value)} />
-            </div>
-            <div>
-              <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
-                PACU Discharge Time
-              </label>
-              <input type="time" className="glass-input" value={pacuOut} onChange={(e) => setPacuOut(e.target.value)} />
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px" }}>
-            <div>
-              <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
                 Post-Op Destination
               </label>
               <select className="glass-input" value={destinationId} onChange={(e) => setDestinationId(e.target.value)}>
@@ -249,17 +245,17 @@ export const PostOrView: React.FC = () => {
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
               <label style={{ fontSize: "12px", fontWeight: 600 }}>Pain Score (0 - 10)</label>
-              <span style={{ fontWeight: 800, fontSize: "14px", color: painScore > 6 ? "var(--danger)" : "var(--primary)" }}>
-                {painScore} / 10
+              <span style={{ fontWeight: 800, fontSize: "14px", color: Number(painScore) > 6 ? "var(--danger)" : "var(--primary)" }}>
+                {painScore ? `${painScore} / 10` : "Not assessed"}
               </span>
             </div>
             <input
-              type="range"
+              type="number"
               min="0"
               max="10"
               value={painScore}
-              onChange={(e) => setPainScore(parseInt(e.target.value, 10) || 0)}
-              style={{ width: "100%", accentColor: "var(--primary)" }}
+              onChange={(e) => setPainScore(e.target.value)}
+              className="glass-input"
             />
           </div>
 
@@ -352,6 +348,8 @@ export const PostOrView: React.FC = () => {
           </div>
         </div>
       </div>
+      <CaseEventsPanel caseId={selectedCaseId} />
+      <FollowupPanel caseId={selectedCaseId} />
 
       {/* Modal: Add Complication */}
       {compModalOpen && (

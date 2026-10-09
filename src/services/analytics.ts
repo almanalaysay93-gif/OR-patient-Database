@@ -5,6 +5,7 @@ export interface AnalyticsSummary {
   uniquePatients: number;
   totalAdmissions: number;
   totalCases: number;
+  uncodedCases: number;
   completedCases: number;
   inProgressCases: number;
   scheduledCases: number;
@@ -48,6 +49,16 @@ export interface AnalyticsSummary {
     complicationRatePct: number;
     byCategory: { category: string; count: number }[];
   };
+  followup30: {
+    eligible: number;
+    assessed: number;
+    unreachable: number;
+    pending: number;
+    readmissions: number;
+    reoperations: number;
+    deaths: number;
+    infections: number;
+  };
 }
 
 export async function getAnalyticsSummary(
@@ -75,11 +86,13 @@ export async function getAnalyticsSummary(
     `SELECT c.case_id, c.patient_id, c.admission_id, c.case_type, c.case_status,
             c.planned_procedure_summary, s.name as specialty_name,
             p.date_of_birth, p.sex,
-            sch.scheduled_date, sch.delay_minutes
+            sch.scheduled_date, sch.delay_minutes, incision.occurred_at as surgery_date
      FROM surgical_cases c
      JOIN patients p ON c.patient_id = p.patient_id
      LEFT JOIN specialties s ON c.specialty_id = s.specialty_id
-     LEFT JOIN or_schedule sch ON sch.case_id = c.case_id
+     LEFT JOIN or_schedule sch ON sch.schedule_id =
+       (SELECT s2.schedule_id FROM or_schedule s2 WHERE s2.case_id = c.case_id ORDER BY s2.created_at DESC LIMIT 1)
+     LEFT JOIN case_events incision ON incision.case_id = c.case_id AND incision.event_type = 'INCISION'
      ${caseWhere}`,
     caseParams
   );
@@ -111,10 +124,12 @@ export async function getAnalyticsSummary(
   let missingSex = 0;
 
   // Track unique patient demographics
-  const patientSeen = new Map<string, { sex: string | null; dob: string | null }>();
+  const patientSeen = new Map<string, { sex: string | null; dob: string | null; surgeryDate: string | null }>();
   for (const c of cases) {
     if (!patientSeen.has(c.patient_id)) {
-      patientSeen.set(c.patient_id, { sex: c.sex, dob: c.date_of_birth });
+      patientSeen.set(c.patient_id, { sex: c.sex, dob: c.date_of_birth, surgeryDate: c.surgery_date });
+    } else if (!patientSeen.get(c.patient_id)?.surgeryDate && c.surgery_date) {
+      patientSeen.get(c.patient_id)!.surgeryDate = c.surgery_date;
     }
   }
 
@@ -127,7 +142,7 @@ export async function getAnalyticsSummary(
     else if (p.sex === "OTHER") other++;
     else missingSex++;
 
-    const age = calculateAge(p.dob);
+    const age = p.surgeryDate ? calculateAge(p.dob, p.surgeryDate) : null;
     if (age != null) patientAges.push(age);
     else missingAgeCount++;
   }
@@ -227,17 +242,35 @@ export async function getAnalyticsSummary(
     .sort((a, b) => b.count - a.count);
 
   // 6. Procedures
-  const procMap = new Map<string, number>();
-  for (const c of cases) {
-    const p = c.planned_procedure_summary || "Other / Unspecified";
-    procMap.set(p, (procMap.get(p) || 0) + 1);
+  const caseIds = new Set(cases.map((c) => c.case_id));
+  const codedRows = await db.select<{
+    case_id: string; procedure_id: string; name: string; code: string | null; code_system: string | null;
+  }>(
+    `SELECT cp.case_id, p.procedure_id, p.procedure_name AS name,
+            p.procedure_code AS code, p.code_system
+     FROM case_procedures cp JOIN procedures p ON p.procedure_id = cp.procedure_id`);
+  // Group by catalog identity, not by name: two terms can share a name.
+  const procMap = new Map<string, { name: string; code: string | null; codeSystem: string | null; count: number }>();
+  const codedCaseIds = new Set<string>();
+  for (const row of codedRows) {
+    if (!caseIds.has(row.case_id)) continue;
+    codedCaseIds.add(row.case_id);
+    const entry = procMap.get(row.procedure_id);
+    if (entry) entry.count++;
+    else procMap.set(row.procedure_id, { name: row.name, code: row.code, codeSystem: row.code_system, count: 1 });
   }
-  const topProcedures = Array.from(procMap.entries())
-    .map(([name, count]) => ({
-      name,
-      count,
-      pct: Math.round((count / caseDenom) * 100),
-    }))
+  const uncodedCases = totalCases - codedCaseIds.size;
+  const nameUses = new Map<string, number>();
+  for (const p of procMap.values()) nameUses.set(p.name, (nameUses.get(p.name) || 0) + 1);
+  const topProcedures = Array.from(procMap.values())
+    .map((p) => {
+      const code = [p.codeSystem, p.code].filter(Boolean).join(" ");
+      return {
+        name: (nameUses.get(p.name) || 0) > 1 && code ? `${p.name} (${code})` : p.name,
+        count: p.count,
+        pct: Math.round((p.count / caseDenom) * 100),
+      };
+    })
     .sort((a, b) => b.count - a.count)
     .slice(0, 8);
 
@@ -287,10 +320,41 @@ export async function getAnalyticsSummary(
     byCategory: compRows.map((r: any) => ({ category: r.category, count: r.count })),
   };
 
+  const followupRows = await db.select<{
+    case_id: string; status: string | null; event_type: string | null;
+  }>(
+    `SELECT c.case_id, f.status, o.event_type
+     FROM surgical_cases c
+     LEFT JOIN case_followup_assessments f ON f.case_id = c.case_id AND f.target_day = 30
+     LEFT JOIN postoperative_outcomes o ON o.case_id = c.case_id
+     ${caseWhere} AND c.case_status = 'COMPLETED'`,
+    caseParams,
+  );
+  const followupByCase = new Map<string, { status: string | null; events: Set<string> }>();
+  for (const row of followupRows) {
+    if (!followupByCase.has(row.case_id)) followupByCase.set(row.case_id, { status: row.status, events: new Set() });
+    if (row.event_type) followupByCase.get(row.case_id)!.events.add(row.event_type);
+  }
+  const followup30 = {
+    eligible: followupByCase.size,
+    assessed: 0, unreachable: 0, pending: 0,
+    readmissions: 0, reoperations: 0, deaths: 0, infections: 0,
+  };
+  for (const item of followupByCase.values()) {
+    if (item.status === "ASSESSED") followup30.assessed++;
+    else if (item.status === "UNREACHABLE") followup30.unreachable++;
+    else followup30.pending++;
+    if (item.events.has("READMISSION")) followup30.readmissions++;
+    if (item.events.has("UNPLANNED_REOPERATION")) followup30.reoperations++;
+    if (item.events.has("DEATH")) followup30.deaths++;
+    if (item.events.has("SURGICAL_SITE_INFECTION")) followup30.infections++;
+  }
+
   return {
     uniquePatients,
     totalAdmissions,
     totalCases,
+    uncodedCases,
     completedCases,
     inProgressCases,
     scheduledCases,
@@ -304,5 +368,6 @@ export async function getAnalyticsSummary(
     topProcedures,
     destinations,
     complicationsSummary,
+    followup30,
   };
 }

@@ -10,22 +10,22 @@ import {
 } from "../services/intraPostOr";
 import { getCaseById, type SurgicalCase } from "../services/patients";
 import { getAnesthesiaTypes, type NamedEntity } from "../services/masterData";
+import { CaseEventsPanel } from "../components/clinical/CaseEventsPanel";
+import { SafetyPhasesPanel } from "../components/clinical/SafetyPhasesPanel";
 
 export const IntraOrView: React.FC = () => {
-  const { db, selectedCaseId, setView, notify } = useApp();
+  const { db, session, selectedCaseId, setView, notify } = useApp();
   const [surgicalCase, setSurgicalCase] = useState<SurgicalCase | null>(null);
   const [anesthesiaTypes, setAnesthesiaTypes] = useState<NamedEntity[]>([]);
 
   // Form states
   const [anesthesiaTypeId, setAnesthesiaTypeId] = useState("");
-  const [asaClass, setAsaClass] = useState("II");
-  const [bloodLoss, setBloodLoss] = useState<number>(50);
+  const [asaClass, setAsaClass] = useState("");
+  const [bloodLoss, setBloodLoss] = useState("");
   const [bloodTransfusion, setBloodTransfusion] = useState(false);
   const [unitsTransfused, setUnitsTransfused] = useState<number>(0);
   const [specimenCollected, setSpecimenCollected] = useState(false);
   const [implantUsed, setImplantUsed] = useState(false);
-  const [procStart, setProcStart] = useState("");
-  const [procEnd, setProcEnd] = useState("");
   const [findings, setFindings] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -43,14 +43,12 @@ export const IntraOrView: React.FC = () => {
 
         if (intra) {
           setAnesthesiaTypeId(intra.anesthesia_type_id || "");
-          setAsaClass(intra.asa_classification || "II");
-          setBloodLoss(intra.estimated_blood_loss_ml || 0);
+          setAsaClass(intra.asa_classification || "");
+          setBloodLoss(intra.estimated_blood_loss_ml?.toString() || "");
           setBloodTransfusion(intra.blood_transfusion === 1);
           setUnitsTransfused(intra.units_transfused || 0);
           setSpecimenCollected(intra.specimen_collected === 1);
           setImplantUsed(intra.implant_used === 1);
-          setProcStart(intra.procedure_start || "");
-          setProcEnd(intra.procedure_end || "");
           setFindings(intra.operative_findings || "");
           setNotes(intra.operative_notes || "");
         }
@@ -69,16 +67,15 @@ export const IntraOrView: React.FC = () => {
       await saveIntraOrRecord(db, {
         caseId: selectedCaseId,
         anesthesiaTypeId: anesthesiaTypeId || null,
-        asaClassification: asaClass,
-        estimatedBloodLossMl: bloodLoss,
+        asaClassification: asaClass || null,
+        estimatedBloodLossMl: bloodLoss ? Number(bloodLoss) : null,
         bloodTransfusion,
         unitsTransfused: bloodTransfusion ? unitsTransfused : 0,
         specimenCollected,
         implantUsed,
-        procedureStart: procStart || null,
-        procedureEnd: procEnd || null,
         operativeFindings: findings,
         operativeNotes: notes,
+        userId: session?.userId,
       });
 
       notify("Intra-OR record saved successfully.", "success");
@@ -184,7 +181,7 @@ export const IntraOrView: React.FC = () => {
               step="10"
               className="glass-input"
               value={bloodLoss}
-              onChange={(e) => setBloodLoss(parseInt(e.target.value, 10) || 0)}
+              onChange={(e) => setBloodLoss(e.target.value)}
             />
           </div>
         </div>
@@ -232,32 +229,6 @@ export const IntraOrView: React.FC = () => {
           </label>
         </div>
 
-        {/* Timestamps */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "18px" }}>
-          <div>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
-              Procedure Start Time
-            </label>
-            <input
-              type="time"
-              className="glass-input"
-              value={procStart}
-              onChange={(e) => setProcStart(e.target.value)}
-            />
-          </div>
-          <div>
-            <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
-              Procedure End Time
-            </label>
-            <input
-              type="time"
-              className="glass-input"
-              value={procEnd}
-              onChange={(e) => setProcEnd(e.target.value)}
-            />
-          </div>
-        </div>
-
         {/* Findings and Notes */}
         <div>
           <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
@@ -293,6 +264,8 @@ export const IntraOrView: React.FC = () => {
           </button>
         </div>
       </form>
+      <CaseEventsPanel caseId={selectedCaseId} />
+      <SafetyPhasesPanel caseId={selectedCaseId} />
     </div>
   );
 };

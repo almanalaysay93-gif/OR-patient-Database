@@ -4,6 +4,11 @@ import { M001_INITIAL } from "./001_initial";
 import { M002_SEED } from "./002_seed";
 import { M003_AUTO_LOGIN } from "./003_workstation_auto_login";
 import { M004_REMOVE_ASSISTANT_SETTINGS } from "./004_remove_assistant_settings";
+import { M005_CASE_CODING } from "./005_case_coding";
+import { M006_PREOP_BASELINE } from "./006_preop_baseline";
+import { M007_SAFETY_PHASES } from "./007_safety_phases";
+import { M008_CASE_EVENTS } from "./008_case_events";
+import { M009_FOLLOWUP } from "./009_followup";
 
 export interface Migration {
   version: number;
@@ -17,6 +22,11 @@ export const MIGRATIONS: Migration[] = [
   { version: 2, name: "seed_reference_data", sql: M002_SEED },
   { version: 3, name: "workstation_auto_login", sql: M003_AUTO_LOGIN },
   { version: 4, name: "remove_assistant_settings", sql: M004_REMOVE_ASSISTANT_SETTINGS },
+  { version: 5, name: "case_coding", sql: M005_CASE_CODING },
+  { version: 6, name: "preop_baseline", sql: M006_PREOP_BASELINE },
+  { version: 7, name: "safety_phases", sql: M007_SAFETY_PHASES },
+  { version: 8, name: "case_events", sql: M008_CASE_EVENTS },
+  { version: 9, name: "followup", sql: M009_FOLLOWUP },
 ];
 
 export interface MigrationResult {

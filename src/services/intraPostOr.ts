@@ -2,6 +2,7 @@ import type { Db } from "../data/db";
 import { uuid, nowIso, bool } from "../data/db";
 import { logAudit } from "./audit";
 import { getCaseById } from "./patients";
+import { createFollowupIfDue } from "./followup";
 
 export interface IntraOrRecord {
   intra_or_id: string;
@@ -98,8 +99,7 @@ export async function saveIntraOrRecord(
         `UPDATE intra_or_records
          SET anesthesia_type_id = ?, asa_classification = ?, estimated_blood_loss_ml = ?,
              blood_transfusion = ?, units_transfused = ?, specimen_collected = ?,
-             implant_used = ?, procedure_start = ?, procedure_end = ?,
-             operative_findings = ?, operative_notes = ?, updated_by = ?, updated_at = ?
+              implant_used = ?, operative_findings = ?, operative_notes = ?, updated_by = ?, updated_at = ?
          WHERE case_id = ?`,
         [
           params.anesthesiaTypeId || null,
@@ -109,8 +109,6 @@ export async function saveIntraOrRecord(
           params.unitsTransfused ?? null,
           bool(params.specimenCollected),
           bool(params.implantUsed),
-          params.procedureStart || null,
-          params.procedureEnd || null,
           params.operativeFindings?.trim() || null,
           params.operativeNotes?.trim() || null,
           params.userId || null,
@@ -123,9 +121,9 @@ export async function saveIntraOrRecord(
         `INSERT INTO intra_or_records (
           intra_or_id, case_id, anesthesia_type_id, asa_classification, estimated_blood_loss_ml,
           blood_transfusion, units_transfused, specimen_collected, implant_used,
-          procedure_start, procedure_end, operative_findings, operative_notes,
+           operative_findings, operative_notes,
           created_by, updated_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           uuid(),
           params.caseId,
@@ -136,8 +134,6 @@ export async function saveIntraOrRecord(
           params.unitsTransfused ?? null,
           bool(params.specimenCollected),
           bool(params.implantUsed),
-          params.procedureStart || null,
-          params.procedureEnd || null,
           params.operativeFindings?.trim() || null,
           params.operativeNotes?.trim() || null,
           params.userId || null,
@@ -209,14 +205,11 @@ export async function savePostOrRecord(
     if (existing.length > 0) {
       await tx.execute(
         `UPDATE post_or_records
-         SET pacu_admission = ?, pacu_discharge = ?, post_op_destination_id = ?,
-             post_op_status = ?, pain_score = ?, complications_present = ?,
+         SET post_op_destination_id = ?, post_op_status = ?, pain_score = ?, complications_present = ?,
              icu_required = ?, reoperation_required = ?, mortality = ?,
              notes = ?, updated_by = ?, updated_at = ?
          WHERE case_id = ?`,
         [
-          params.pacuAdmission || null,
-          params.pacuDischarge || null,
           params.postOpDestinationId || null,
           params.postOpStatus || null,
           params.painScore ?? null,
@@ -233,15 +226,13 @@ export async function savePostOrRecord(
     } else {
       await tx.execute(
         `INSERT INTO post_or_records (
-          post_or_id, case_id, pacu_admission, pacu_discharge, post_op_destination_id,
+           post_or_id, case_id, post_op_destination_id,
           post_op_status, pain_score, complications_present, icu_required,
           reoperation_required, mortality, notes, created_by, updated_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           uuid(),
           params.caseId,
-          params.pacuAdmission || null,
-          params.pacuDischarge || null,
           params.postOpDestinationId || null,
           params.postOpStatus || null,
           params.painScore ?? null,
@@ -375,5 +366,8 @@ export async function completeCase(
       oldValue: c.case_status,
       newValue: "COMPLETED",
     });
+
+    // Follow-up stays NOT_CREATED in the queue when no surgery event is dated yet.
+    await createFollowupIfDue(tx, { caseId, patientId: c.patient_id, userId });
   });
 }
