@@ -8,6 +8,7 @@ import {
   Plus,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
+import { localDate } from "../data/db";
 import { getAnalyticsSummary, type AnalyticsSummary } from "../services/analytics";
 import { getScheduleByDate, type ScheduleItem } from "../services/scheduling";
 import { getOrRooms, type OrRoom } from "../services/masterData";
@@ -19,7 +20,7 @@ export const DashboardView: React.FC = () => {
   const [rooms, setRooms] = useState<OrRoom[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = localDate();
 
   useEffect(() => {
     async function loadData() {
@@ -51,6 +52,12 @@ export const DashboardView: React.FC = () => {
     );
   }
 
+  // A cancelled or postponed slot is not on today's list any more.
+  const liveSchedule = schedule.filter((s) => s.schedule_status !== "CANCELLED" && s.schedule_status !== "POSTPONED");
+  const preOrCount = (summary?.caseStatuses ?? [])
+    .filter((s) => ["PRE_OR", "NOT_READY", "READY"].includes(s.status))
+    .reduce((n, s) => n + s.count, 0);
+
   const kpis = [
     {
       label: "Unique Patients",
@@ -62,7 +69,7 @@ export const DashboardView: React.FC = () => {
     },
     {
       label: "Scheduled Today",
-      value: schedule.length,
+      value: liveSchedule.length,
       sub: "Across active OR rooms",
       icon: Calendar,
       color: "#0d9488",
@@ -70,7 +77,7 @@ export const DashboardView: React.FC = () => {
     },
     {
       label: "Pre-OR Pipeline",
-      value: (summary?.totalCases ?? 0) - (summary?.completedCases ?? 0),
+      value: preOrCount,
       sub: "Active preparation queue",
       icon: ClipboardList,
       color: "#d97706",
@@ -165,8 +172,9 @@ export const DashboardView: React.FC = () => {
 
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(rooms.length, 3)}, 1fr)`, gap: "16px" }}>
           {rooms.map((room) => {
-            const roomSchedules = schedule.filter((s) => s.or_room_id === room.or_room_id);
-            const activeNow = roomSchedules.find((s) => s.actual_room_in && !s.actual_room_out);
+            const roomSchedules = liveSchedule.filter((s) => s.or_room_id === room.or_room_id);
+            const activeNow = roomSchedules.find((s) =>
+              s.schedule_status === "IN_PROGRESS" || (s.actual_room_in && !s.actual_room_out));
 
             return (
               <div

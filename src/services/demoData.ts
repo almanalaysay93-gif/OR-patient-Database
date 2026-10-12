@@ -44,19 +44,49 @@ const LAST_NAMES = [
   "Testcase", "Sample", "Mockwell", "Simulado", "Placeholder", "Demoson", "Fictiva", "Example", "Trialman", "Dryrun",
 ];
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
-const WARDS = ["Surgical Ward A", "Surgical Ward B", "Orthopedic Ward", "OB Ward", "Private Wing"];
 const PHYSICIANS = ["Dr. Demo Alvarez", "Dr. Demo Bautista", "Dr. Demo Cruz", "Dr. Demo Dizon"];
-const SPECIALTIES = ["General Surgery", "Orthopedics", "OB-GYN", "Urology"];
-const PROCEDURES = [
-  { name: "Laparoscopic cholecystectomy", diagnosis: "Symptomatic cholelithiasis" },
-  { name: "Open appendectomy", diagnosis: "Acute appendicitis" },
-  { name: "Inguinal hernia repair", diagnosis: "Inguinal hernia" },
-  { name: "Total knee arthroplasty", diagnosis: "Osteoarthritis of the knee" },
-  { name: "Cesarean section", diagnosis: "Cephalopelvic disproportion" },
-  { name: "Transurethral resection of prostate", diagnosis: "Benign prostatic hyperplasia" },
-  { name: "Open reduction internal fixation, femur", diagnosis: "Closed femoral shaft fracture" },
-  { name: "Total thyroidectomy", diagnosis: "Multinodular goiter" },
+/**
+ * Each demo procedure carries the clinical facts that have to agree with it: the specialty that
+ * performs it, the ward, the usual anesthesia, a plausible age range, and a plausible complication.
+ */
+interface DemoProcedure {
+  name: string;
+  diagnosis: string;
+  specialty: string;
+  ward: string;
+  anesthesia: string;
+  ages: [number, number];
+  specimen: boolean;
+  dayCase: boolean;
+  complication: string;
+}
+export const DEMO_PROCEDURES: DemoProcedure[] = [
+  { name: "Laparoscopic cholecystectomy", diagnosis: "Symptomatic cholelithiasis", specialty: "General Surgery",
+    ward: "Surgical Ward A", anesthesia: "General", ages: [25, 70], specimen: true, dayCase: true,
+    complication: "Surgical site infection" },
+  { name: "Open appendectomy", diagnosis: "Acute appendicitis", specialty: "General Surgery",
+    ward: "Surgical Ward A", anesthesia: "General", ages: [18, 50], specimen: true, dayCase: false,
+    complication: "Surgical site infection" },
+  { name: "Inguinal hernia repair", diagnosis: "Inguinal hernia", specialty: "General Surgery",
+    ward: "Surgical Ward B", anesthesia: "Spinal", ages: [20, 75], specimen: false, dayCase: true,
+    complication: "Hematoma" },
+  { name: "Total knee arthroplasty", diagnosis: "Osteoarthritis of the knee", specialty: "Orthopedics",
+    ward: "Orthopedic Ward", anesthesia: "Spinal", ages: [55, 80], specimen: false, dayCase: false,
+    complication: "Deep vein thrombosis" },
+  { name: "Cesarean section", diagnosis: "Cephalopelvic disproportion", specialty: "OB-GYN",
+    ward: "OB Ward", anesthesia: "Spinal", ages: [20, 40], specimen: false, dayCase: false,
+    complication: "Post-operative bleeding" },
+  { name: "Transurethral resection of prostate", diagnosis: "Benign prostatic hyperplasia", specialty: "Urology",
+    ward: "Surgical Ward B", anesthesia: "Spinal", ages: [55, 85], specimen: true, dayCase: false,
+    complication: "Urinary retention" },
+  { name: "Open reduction internal fixation, femur", diagnosis: "Closed femoral shaft fracture", specialty: "Orthopedics",
+    ward: "Orthopedic Ward", anesthesia: "Spinal", ages: [18, 80], specimen: false, dayCase: false,
+    complication: "Deep vein thrombosis" },
+  { name: "Total thyroidectomy", diagnosis: "Multinodular goiter", specialty: "General Surgery",
+    ward: "Surgical Ward A", anesthesia: "General", ages: [25, 65], specimen: true, dayCase: false,
+    complication: "Hematoma" },
 ];
+const PROCEDURES = DEMO_PROCEDURES;
 const SLOT_STARTS = ["07:00", "09:15", "11:30", "13:45", "16:00"];
 const SLOT_MINUTES = 120;
 const ASA = ["I", "II", "III", "II", "I", "IV"];
@@ -89,6 +119,52 @@ export async function countDemoPatients(db: Db): Promise<number> {
 }
 
 /**
+ * Removes every simulated patient and the records that hang off them. Shared master data (rooms,
+ * specialties, procedures, diagnoses) and the audit trail stay: the audit log is append-only.
+ * Returns how many patients were removed.
+ */
+export async function clearDemoData(db: Db): Promise<number> {
+  requirePermission("users.manage");
+  if (db.kind !== "sqljs") throw new Error("Demo patients can only be cleared in the browser preview.");
+  const count = await countDemoPatients(db);
+  if (!count) return 0;
+
+  // Subqueries keep the statements free of bound parameters, so the list length does not matter.
+  const patients = `(SELECT patient_id FROM patients WHERE hrn LIKE '${DEMO_HRN_PREFIX}%')`;
+  const admissions = `(SELECT admission_id FROM admissions WHERE patient_id IN ${patients})`;
+  const cases = `(SELECT case_id FROM surgical_cases WHERE patient_id IN ${patients})`;
+  // Children first, so no foreign key is left pointing at a removed row.
+  const statements = [
+    `DELETE FROM postoperative_outcomes WHERE case_id IN ${cases}`,
+    `DELETE FROM case_followup_assessments WHERE case_id IN ${cases}`,
+    `DELETE FROM safety_responses WHERE case_id IN ${cases}`,
+    `DELETE FROM case_safety_templates WHERE case_id IN ${cases}`,
+    `DELETE FROM case_preop_baseline WHERE case_id IN ${cases}`,
+    `DELETE FROM case_events WHERE case_id IN ${cases}`,
+    `DELETE FROM pre_or_checklist_values WHERE case_id IN ${cases}`,
+    `DELETE FROM pre_or_assessments WHERE case_id IN ${cases}`,
+    `DELETE FROM or_schedule WHERE case_id IN ${cases}`,
+    `DELETE FROM intra_or_records WHERE case_id IN ${cases}`,
+    `DELETE FROM post_or_records WHERE case_id IN ${cases}`,
+    `DELETE FROM complications WHERE case_id IN ${cases}`,
+    `DELETE FROM case_procedures WHERE case_id IN ${cases}`,
+    `DELETE FROM case_diagnoses WHERE case_id IN ${cases}`,
+    `DELETE FROM case_team WHERE case_id IN ${cases}`,
+    `DELETE FROM custom_field_values WHERE patient_id IN ${patients} OR admission_id IN ${admissions} OR case_id IN ${cases}`,
+    `DELETE FROM laboratory_results WHERE patient_id IN ${patients} OR admission_id IN ${admissions} OR case_id IN ${cases}`,
+    `DELETE FROM patient_lab_results WHERE patient_id IN ${patients} OR case_id IN ${cases}`,
+    `DELETE FROM clinical_attachments WHERE patient_id IN ${patients} OR case_id IN ${cases}`,
+    `DELETE FROM surgical_cases WHERE patient_id IN ${patients}`,
+    `DELETE FROM admissions WHERE patient_id IN ${patients}`,
+    `DELETE FROM patients WHERE patient_id IN ${patients}`,
+  ];
+  await db.transaction(async (tx) => {
+    for (const sql of statements) await tx.execute(sql);
+  });
+  return count;
+}
+
+/**
  * Fills the browser preview database with 100 simulated patients spread across every stage.
  * Everything goes through the normal services, so audit entries and status rules match real use.
  * Refused on the desktop database: simulated patients must never mix with real records.
@@ -104,17 +180,19 @@ export async function seedDemoData(db: Db, onProgress?: (done: number, total: nu
     await addOrRoom(db, `Demo OR ${n}`);
     rooms = await getOrRooms(db);
   }
-  let specialties = await getSpecialties(db);
-  if (!specialties.length) {
-    for (const name of SPECIALTIES) await addSpecialty(db, name);
-    specialties = await getSpecialties(db);
+  // Every specialty a demo procedure belongs to, looked up by name so a case never gets an unrelated one.
+  const specialtyIds = new Map<string, string>();
+  const knownSpecialties = await getSpecialties(db, false);
+  for (const name of new Set(PROCEDURES.map((p) => p.specialty))) {
+    const existing = knownSpecialties.find((s) => s.name.toLowerCase() === name.toLowerCase());
+    specialtyIds.set(name, existing?.specialty_id ?? await addSpecialty(db, name));
   }
   const knownProcedures = await getProcedures(db);
   const knownDiagnoses = await getDiagnoses(db);
   const coding: { procedureId: string; diagnosisId: string }[] = [];
   for (const p of PROCEDURES) {
     const procedure = knownProcedures.find((x) => x.procedure_name === p.name)
-      ?? await createProcedure(db, { name: p.name });
+      ?? await createProcedure(db, { name: p.name, specialtyId: specialtyIds.get(p.specialty) });
     const diagnosis = knownDiagnoses.find((x) => x.diagnosis_name === p.diagnosis)
       ?? await createDiagnosis(db, { name: p.diagnosis });
     coding.push({ procedureId: procedure.procedure_id, diagnosisId: diagnosis.diagnosis_id });
@@ -123,6 +201,8 @@ export async function seedDemoData(db: Db, onProgress?: (done: number, total: nu
   const destinations = await getPostOpDestinations(db);
   const complicationTypes = await getComplicationTypes(db);
   const delayReasons = await getDelayReasons(db);
+  const byName = <T extends { name: string }>(rows: T[], name: string) => rows.find((r) => r.name === name);
+  const thisYear = new Date().getFullYear();
 
   // One free OR slot per call; days never overlap between rooms.
   const used = new Map<string, number>();
@@ -156,7 +236,7 @@ export async function seedDemoData(db: Db, onProgress?: (done: number, total: nu
       hrn: `${DEMO_HRN_PREFIX}${pad(i + 1, 4)}`,
       firstName: FIRST_NAMES[i % FIRST_NAMES.length],
       lastName: `${LAST_NAMES[Math.floor(i / FIRST_NAMES.length) % LAST_NAMES.length]}-${pad(i + 1, 3)}`,
-      dateOfBirth: `${1945 + ((i * 7) % 60)}-${pad(1 + (i % 12))}-${pad(1 + ((i * 3) % 28))}`,
+      dateOfBirth: `${thisYear - 1 - proc.ages[0] - ((i * 7) % (proc.ages[1] - proc.ages[0] + 1))}-${pad(1 + (i % 12))}-${pad(1 + ((i * 3) % 28))}`,
       sex,
       address: `${100 + i} Sample Street, Demo City`,
       contactNumber: `0900-000-${pad(i + 1, 4)}`,
@@ -165,7 +245,7 @@ export async function seedDemoData(db: Db, onProgress?: (done: number, total: nu
     const admission = await createAdmission(db, {
       patientId: patient.patient_id,
       admissionDate,
-      ward: WARDS[i % WARDS.length],
+      ward: i % 10 === 9 ? "Private Wing" : proc.ward,
       room: `${200 + (i % 40)}`,
       bed: i % 2 ? "B" : "A",
       attendingPhysician: PHYSICIANS[i % PHYSICIANS.length],
@@ -175,7 +255,7 @@ export async function seedDemoData(db: Db, onProgress?: (done: number, total: nu
       patientId: patient.patient_id,
       admissionId: admission.admission_id,
       caseType: i % 9 === 0 ? "EMERGENCY" : i % 5 === 0 ? "URGENT" : "ELECTIVE",
-      specialtyId: specialties[i % specialties.length]?.specialty_id,
+      specialtyId: specialtyIds.get(proc.specialty),
       laterality: proc.name.includes("knee") || proc.name.includes("femur") ? (i % 2 ? "LEFT" : "RIGHT") : undefined,
       plannedProcedureSummary: proc.name,
       preoperativeDiagnosisSummary: proc.diagnosis,
@@ -240,15 +320,13 @@ export async function seedDemoData(db: Db, onProgress?: (done: number, total: nu
       const transfused = i % 13 === 0;
       await saveIntraOrRecord(db, {
         caseId,
-        anesthesiaTypeId: anesthesia.length ? anesthesia[i % anesthesia.length].id : null,
+        anesthesiaTypeId: (byName(anesthesia, proc.anesthesia) ?? anesthesia[0])?.id ?? null,
         asaClassification: ASA[i % ASA.length],
         estimatedBloodLossMl: leftTheatre ? 50 + (i % 9) * 60 : null,
         bloodTransfusion: transfused,
         unitsTransfused: transfused ? 1 + (i % 2) : null,
-        specimenCollected: i % 3 === 0,
+        specimenCollected: proc.specimen,
         implantUsed: proc.name.includes("arthroplasty") || proc.name.includes("fixation"),
-        procedureStart: stamp(slot.date, slot.start, 25),
-        procedureEnd: leftTheatre ? stamp(slot.date, slot.start, 95) : null,
         operativeFindings: leftTheatre ? `Simulated findings consistent with ${proc.diagnosis.toLowerCase()}.` : null,
         operativeNotes: leftTheatre ? "Simulated: procedure completed as planned." : "Simulated: procedure in progress.",
       });
@@ -266,16 +344,19 @@ export async function seedDemoData(db: Db, onProgress?: (done: number, total: nu
 
     // Post-op.
     const complicated = done && k % 5 === 0 && complicationTypes.length > 0;
+    const icu = complicated && k % 10 === 0;
     if (leftTheatre && slot) {
+      // Destination follows the case: ICU only when flagged, day cases go home, nobody goes to the morgue.
+      const destinationName = icu ? "ICU"
+        : proc.dayCase && !complicated ? "Day surgery discharge"
+        : i % 2 ? "Ward" : "PACU then ward";
       await savePostOrRecord(db, {
         caseId,
-        pacuAdmission: stamp(slot.date, slot.start, 115),
-        pacuDischarge: done ? stamp(slot.date, slot.start, 175) : null,
-        postOpDestinationId: destinations.length ? destinations[i % destinations.length].id : null,
+        postOpDestinationId: (byName(destinations, destinationName) ?? byName(destinations, "Ward"))?.id ?? null,
         postOpStatus: done ? "Stable" : "Recovering",
         painScore: i % 8,
         complicationsPresent: complicated,
-        icuRequired: complicated && k % 10 === 0,
+        icuRequired: icu,
         reoperationRequired: false,
         mortality: false,
         notes: "Simulated recovery note.",
@@ -286,7 +367,7 @@ export async function seedDemoData(db: Db, onProgress?: (done: number, total: nu
       if (complicated) {
         await addComplication(db, {
           caseId,
-          complicationTypeId: complicationTypes[k % complicationTypes.length].complication_type_id,
+          complicationTypeId: (byName(complicationTypes, proc.complication) ?? complicationTypes[0]).complication_type_id,
           severity: (["MINOR", "MODERATE", "SEVERE"] as const)[k % 3],
           occurredAt: stamp(slot.date, slot.start, 240),
           description: "Simulated complication.",

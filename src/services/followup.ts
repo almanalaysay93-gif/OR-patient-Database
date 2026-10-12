@@ -205,6 +205,6 @@ export async function getFollowupQueue(db: Db): Promise<{
      FROM surgical_cases c
      JOIN patients p ON p.patient_id = c.patient_id
      LEFT JOIN case_followup_assessments f ON f.case_id = c.case_id AND f.target_day = 30
-     WHERE c.case_status = 'COMPLETED'
+     WHERE c.case_status = 'COMPLETED' AND p.is_active = 1
      ORDER BY CASE WHEN f.due_date IS NULL THEN 0 ELSE 1 END, f.due_date, c.created_at DESC`);
 }

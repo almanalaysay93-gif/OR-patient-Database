@@ -79,8 +79,6 @@ export async function saveIntraOrRecord(
     unitsTransfused?: number | null;
     specimenCollected?: boolean | null;
     implantUsed?: boolean | null;
-    procedureStart?: string | null;
-    procedureEnd?: string | null;
     operativeFindings?: string | null;
     operativeNotes?: string | null;
     userId?: string | null;
@@ -153,6 +151,12 @@ export async function saveIntraOrRecord(
         "UPDATE surgical_cases SET case_status = 'IN_OR', updated_by = ?, updated_at = ? WHERE case_id = ?",
         [params.userId || null, now, params.caseId]
       );
+      // Keep the OR slot in step with the case, as moveCaseStage does.
+      await tx.execute(
+        `UPDATE or_schedule SET schedule_status = 'IN_PROGRESS', updated_by = ?, updated_at = ?
+         WHERE case_id = ? AND schedule_status = 'SCHEDULED'`,
+        [params.userId || null, now, params.caseId]
+      );
     }
 
     await logAudit(tx, {
@@ -183,8 +187,6 @@ export async function savePostOrRecord(
   db: Db,
   params: {
     caseId: string;
-    pacuAdmission?: string | null;
-    pacuDischarge?: string | null;
     postOpDestinationId?: string | null;
     postOpStatus?: string | null;
     painScore?: number | null;
@@ -351,6 +353,9 @@ export async function completeCase(
   userId = requirePermission("postor.edit");
   const c = await getCaseById(db, caseId);
   if (!c) throw new Error("Case not found.");
+  if (c.case_status === "CANCELLED" || c.case_status === "POSTPONED") {
+    throw new Error("A cancelled or postponed case cannot be completed. Reopen it first.");
+  }
 
   const now = nowIso();
   await db.transaction(async (tx) => {
@@ -358,8 +363,10 @@ export async function completeCase(
       "UPDATE surgical_cases SET case_status = 'COMPLETED', updated_by = ?, updated_at = ? WHERE case_id = ?",
       [userId || null, now, caseId]
     );
+    // A cancelled or postponed slot keeps its own status.
     await tx.execute(
-      "UPDATE or_schedule SET schedule_status = 'COMPLETED', updated_by = ?, updated_at = ? WHERE case_id = ?",
+      `UPDATE or_schedule SET schedule_status = 'COMPLETED', updated_by = ?, updated_at = ?
+       WHERE case_id = ? AND schedule_status IN ('SCHEDULED','IN_PROGRESS')`,
       [userId || null, now, caseId]
     );
 

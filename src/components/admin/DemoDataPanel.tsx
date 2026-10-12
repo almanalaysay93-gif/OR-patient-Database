@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { FlaskConical } from "lucide-react";
 import { useApp } from "../../context/AppContext";
-import { countDemoPatients, seedDemoData } from "../../services/demoData";
+import { clearDemoData, countDemoPatients, seedDemoData } from "../../services/demoData";
 
 /** Browser preview only: fills the test database with simulated patients. Never shown on the desktop app. */
 export const DemoDataPanel: React.FC = () => {
@@ -29,6 +29,21 @@ export const DemoDataPanel: React.FC = () => {
     }
   };
 
+  const handleClear = async () => {
+    if (progress) return;
+    if (!window.confirm(`Remove all ${loaded} demo patients and their records? Audit history is kept.`)) return;
+    setProgress("Clearing…");
+    try {
+      const removed = await clearDemoData(db);
+      setLoaded(0);
+      notify(`${removed} demo patients removed.`, "success");
+    } catch (err) {
+      notify((err as Error).message, "error");
+    } finally {
+      setProgress(null);
+    }
+  };
+
   return (
     <div className="glass-card" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
       <h2 style={{ fontSize: "16px", fontWeight: 700, borderBottom: "1px solid var(--border-glass)", paddingBottom: "10px" }}>
@@ -39,7 +54,13 @@ export const DemoDataPanel: React.FC = () => {
         completed, cancelled, postponed and archived. Their record numbers start with DEMO-.
       </p>
       {loaded > 0 ? (
-        <p style={{ fontSize: "13px", fontWeight: 600 }}>{loaded} demo patients are loaded.</p>
+        <>
+          <p style={{ fontSize: "13px", fontWeight: 600 }}>{loaded} demo patients are loaded.</p>
+          <button type="button" className="glass-btn" onClick={handleClear} disabled={!!progress}
+            style={{ alignSelf: "flex-start" }}>
+            <span>{progress ? progress : "Clear demo patients"}</span>
+          </button>
+        </>
       ) : (
         <button type="button" className="glass-btn glass-btn-primary" onClick={handleLoad} disabled={!!progress} style={{ gap: "6px", alignSelf: "flex-start" }}>
           <FlaskConical size={14} />

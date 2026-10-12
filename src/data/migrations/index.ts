@@ -14,6 +14,7 @@ import { M011_FORCE_ADMIN_PASSWORD_CHANGE } from "./011_force_admin_password_cha
 import { M012_ARCHIVE_AND_CASE_STAGE } from "./012_archive_and_case_stage";
 import { M013_SET_ADMIN_PASSWORD } from "./013_set_admin_password";
 import { M014_LABORATORY_AND_ATTACHMENTS } from "./014_laboratory_and_attachments";
+import { M015_ENFORCE_ADMIN_PASSWORD } from "./015_enforce_admin_password";
 
 export interface Migration {
   version: number;
@@ -37,6 +38,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 12, name: "archive_and_case_stage", sql: M012_ARCHIVE_AND_CASE_STAGE },
   { version: 13, name: "set_admin_password", sql: M013_SET_ADMIN_PASSWORD },
   { version: 14, name: "laboratory_and_attachments", sql: M014_LABORATORY_AND_ATTACHMENTS },
+  { version: 15, name: "enforce_admin_password", sql: M015_ENFORCE_ADMIN_PASSWORD },
 ];
 
 export interface MigrationResult {

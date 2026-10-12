@@ -304,6 +304,17 @@ export async function listPatients(
   return { patients, total };
 }
 
+/** A generated record number that is not in use yet: the clock-based number, stepped forward on a clash. */
+async function freeNumber(
+  db: Db, table: "admissions" | "surgical_cases", column: "admission_number" | "case_number", prefix: string,
+): Promise<string> {
+  for (let n = Date.now() % 1000000; ; n = (n + 1) % 1000000) {
+    const candidate = `${prefix}-${String(n).padStart(6, "0")}`;
+    const taken = await db.select<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table} WHERE ${column} = ?`, [candidate]);
+    if (!taken[0]?.n) return candidate;
+  }
+}
+
 export async function createAdmission(
   db: Db,
   params: {
@@ -322,8 +333,7 @@ export async function createAdmission(
   const admissionId = uuid();
   const now = nowIso();
   const admissionNo =
-    params.admissionNumber?.trim() ||
-    `ADM-${Date.now().toString().slice(-6)}`;
+    params.admissionNumber?.trim() || await freeNumber(db, "admissions", "admission_number", "ADM");
 
   await db.transaction(async (tx) => {
     await tx.execute(
@@ -391,8 +401,7 @@ export async function createSurgicalCase(
   const caseId = uuid();
   const now = nowIso();
   const caseNo =
-    params.caseNumber?.trim() ||
-    `CASE-${Date.now().toString().slice(-6)}`;
+    params.caseNumber?.trim() || await freeNumber(db, "surgical_cases", "case_number", "CASE");
 
   await db.transaction(async (tx) => {
     await tx.execute(
@@ -566,7 +575,7 @@ export async function searchGlobal(
      FROM surgical_cases c
      JOIN patients p ON c.patient_id = p.patient_id
      LEFT JOIN specialties s ON c.specialty_id = s.specialty_id
-     WHERE c.case_number LIKE ? OR c.planned_procedure_summary LIKE ?
+     WHERE p.is_active = 1 AND (c.case_number LIKE ? OR c.planned_procedure_summary LIKE ?)
      LIMIT 10`,
     [q, q]
   );

@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { useApp } from "../../context/AppContext";
 import {
-  createDiagnosis, createProcedure, getDiagnoses, getProcedures, type Diagnosis, type Procedure,
+  createDiagnosis, createProcedure, getDiagnoses, getProcedures, getSpecialties,
+  type Diagnosis, type Procedure, type Specialty,
 } from "../../services/masterData";
+import { getCaseById } from "../../services/patients";
 import { getCaseCoding, saveCaseCoding, type DiagnosisType } from "../../services/caseCoding";
 
 const TYPES: DiagnosisType[] = ["PRE_OPERATIVE", "POST_OPERATIVE", "COMORBIDITY", "OTHER"];
@@ -21,11 +23,21 @@ export function CaseCodingPanel({ caseId }: { caseId: string }) {
   const [newDiagnosis, setNewDiagnosis] = useState("");
   const [newCode, setNewCode] = useState("");
   const [newSystem, setNewSystem] = useState("");
+  const [specialties, setSpecialties] = useState<Specialty[]>([]);
+  const [caseSpecialtyId, setCaseSpecialtyId] = useState<string | null>(null);
+  const [newSpecialtyId, setNewSpecialtyId] = useState("");
+  const specialtyName = (id: string | null) => specialties.find((s) => s.specialty_id === id)?.name;
 
   useEffect(() => {
     if (!db) return;
-    Promise.all([getProcedures(db, false), getDiagnoses(db, false), getCaseCoding(db, caseId)])
-      .then(([proc, dx, coding]) => {
+    Promise.all([
+      getProcedures(db, false), getDiagnoses(db, false), getCaseCoding(db, caseId),
+      getSpecialties(db, false), getCaseById(db, caseId),
+    ])
+      .then(([proc, dx, coding, specs, surgicalCase]) => {
+        setSpecialties(specs);
+        setCaseSpecialtyId(surgicalCase?.specialty_id ?? null);
+        setNewSpecialtyId(surgicalCase?.specialty_id ?? "");
         setProcedures(proc);
         setDiagnoses(dx);
         setPrimary(coding.procedures.find((p) => p.is_primary)?.procedure_id || "");
@@ -57,7 +69,8 @@ export function CaseCodingPanel({ caseId }: { caseId: string }) {
     try {
       if (kind === "procedure") {
         const item = await createProcedure(db, {
-          name: newProcedure, code: newCode, codeSystem: newSystem, userId: session?.userId,
+          name: newProcedure, code: newCode, codeSystem: newSystem, specialtyId: newSpecialtyId || null,
+          userId: session?.userId,
         });
         setProcedures((old) => [...old, item].sort((a, b) => a.procedure_name.localeCompare(b.procedure_name)));
         setPrimary(item.procedure_id);
@@ -93,6 +106,12 @@ export function CaseCodingPanel({ caseId }: { caseId: string }) {
           <input className="glass-input" aria-label="Code system" placeholder="Code system (optional)"
             value={newSystem} onChange={(e) => setNewSystem(e.target.value)} />
         </div>
+        <select className="glass-input" aria-label="New procedure specialty" value={newSpecialtyId}
+          onChange={(e) => setNewSpecialtyId(e.target.value)}>
+          <option value="">Procedure specialty (optional)</option>
+          {specialties.filter((s) => s.active || s.specialty_id === newSpecialtyId).map((s) =>
+            <option key={s.specialty_id} value={s.specialty_id}>{s.name}</option>)}
+        </select>
         <div style={{ display: "flex", gap: 8 }}>
           <button type="button" className="glass-btn glass-btn-secondary" disabled={!newProcedure.trim()}
             onClick={() => addCatalogItem("procedure")}>Add procedure term</button>
@@ -105,10 +124,20 @@ export function CaseCodingPanel({ caseId }: { caseId: string }) {
         <select className="glass-input" value={primary} onChange={(e) => setPrimary(e.target.value)}>
           <option value="">Not yet coded</option>
           {procedures.map((p) => <option key={p.procedure_id} value={p.procedure_id} disabled={!p.active && p.procedure_id !== primary}>
-            {p.procedure_name}{p.active ? "" : " (archived)"}
+            {p.procedure_name}{specialtyName(p.specialty_id) ? ` - ${specialtyName(p.specialty_id)}` : ""}{p.active ? "" : " (archived)"}
           </option>)}
         </select>
       </label>
+      {(() => {
+        const chosen = procedures.find((p) => p.procedure_id === primary);
+        if (!chosen?.specialty_id || !caseSpecialtyId || chosen.specialty_id === caseSpecialtyId) return null;
+        return (
+          <p role="alert" style={{ margin: 0, color: "var(--warning)", fontWeight: 600 }}>
+            This procedure belongs to {specialtyName(chosen.specialty_id)}, but the case is under {specialtyName(caseSpecialtyId)}.
+            Check the procedure or the case specialty.
+          </p>
+        );
+      })()}
       <div>
         <div>Additional procedures</div>
         {procedures.filter((p) => p.procedure_id !== primary).map((p) => (

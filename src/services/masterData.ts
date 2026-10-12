@@ -96,7 +96,9 @@ export async function getDiagnoses(db: Db, onlyActive = true): Promise<Diagnosis
 }
 
 export async function createProcedure(
-  db: Db, params: { name: string; code?: string | null; codeSystem?: string | null; userId?: string | null },
+  db: Db, params: {
+    name: string; code?: string | null; codeSystem?: string | null; specialtyId?: string | null; userId?: string | null;
+  },
 ): Promise<Procedure> {
   params = { ...params, userId: requirePermission("masterdata.manage", "cases.edit") };
   const name = params.name.trim();
@@ -106,9 +108,9 @@ export async function createProcedure(
   await db.transaction(async (tx) => {
     await tx.execute(
       `INSERT INTO procedures
-       (procedure_id, procedure_code, procedure_name, code_system, active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 1, ?, ?)`,
-      [id, params.code?.trim() || null, name, params.codeSystem?.trim() || null, now, now]);
+       (procedure_id, procedure_code, procedure_name, code_system, specialty_id, active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+      [id, params.code?.trim() || null, name, params.codeSystem?.trim() || null, params.specialtyId || null, now, now]);
     await logAudit(tx, { userId: params.userId, action: "CREATE_PROCEDURE", entityType: "PROCEDURE",
       recordId: id, newValue: JSON.stringify({ name, code: params.code || null, system: params.codeSystem || null }) });
   });

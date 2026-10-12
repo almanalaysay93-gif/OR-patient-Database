@@ -103,6 +103,7 @@ export async function getUncodedCases(db: Db): Promise<{ case_id: string; case_n
   requirePermission("patients.view");
   return db.select(
     `SELECT c.case_id, c.case_number, c.planned_procedure_summary FROM surgical_cases c
-     WHERE NOT EXISTS (SELECT 1 FROM case_procedures cp WHERE cp.case_id = c.case_id AND cp.is_primary = 1)
+     JOIN patients p ON p.patient_id = c.patient_id
+     WHERE p.is_active = 1 AND c.case_status <> 'CANCELLED' AND NOT EXISTS (SELECT 1 FROM case_procedures cp WHERE cp.case_id = c.case_id AND cp.is_primary = 1)
      ORDER BY c.created_at DESC`);
 }

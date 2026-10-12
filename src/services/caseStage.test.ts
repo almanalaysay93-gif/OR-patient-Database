@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { openMemoryDb } from "../data/sqljs-adapter";
 import { runMigrations } from "../data/migrations";
 import type { Db } from "../data/db";
@@ -106,6 +106,39 @@ describe("cancel and postpone a case", () => {
     await book(c.case_id);
     expect(await status(c.case_id)).toBe("SCHEDULED");
     expect(await slotStatus(c.case_id)).toBe("SCHEDULED");
+  });
+
+  it("rebooks a postponed case directly and clears the postpone reason", async () => {
+    const { c } = await makeCase();
+    await book(c.case_id);
+    await postponeCase(db, c.case_id, "No ICU bed available");
+    await book(c.case_id);
+    expect(await status(c.case_id)).toBe("SCHEDULED");
+    expect(await slotStatus(c.case_id)).toBe("SCHEDULED");
+    expect((await getCaseById(db, c.case_id))!.status_reason).toBeNull();
+  });
+
+  it("refuses to book a case that is cancelled or finished", async () => {
+    const { c } = await makeCase();
+    const { room, slot } = await book(c.case_id);
+    await cancelCase(db, c.case_id, "Patient has a fever");
+    await expect(scheduleCase(db, { ...slot, roomId: room.or_room_id })).rejects.toThrow("has not started");
+    expect(await status(c.case_id)).toBe("CANCELLED");
+  });
+
+  it("gives cases and admissions opened in the same instant different numbers", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1790000123456);
+    try {
+      const first = await makeCase("HRN-80");
+      const second = await makeCase("HRN-81");
+      expect(first.c.case_number).toBe("CASE-123456");
+      expect(second.c.case_number).toBe("CASE-123457");
+      const admissions = await db.select<{ admission_number: string }>(
+        "SELECT admission_number FROM admissions ORDER BY admission_number");
+      expect(admissions.map((a) => a.admission_number)).toEqual(["ADM-123456", "ADM-123457"]);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("read-only and research users cannot cancel or postpone", async () => {

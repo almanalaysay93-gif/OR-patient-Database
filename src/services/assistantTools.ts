@@ -98,8 +98,10 @@ const LATEST_SCHEDULE_JOIN = `LEFT JOIN or_schedule sch ON sch.schedule_id = (
 async function getOrSchedule(db: Db, args: Args, entities: EntityMap) {
   const date = dateArg(args, "date", true)!;
   const rows = await db.select<any>(
-    `SELECT s.scheduled_start, s.estimated_duration_minutes, s.actual_room_in, s.actual_procedure_start,
-            s.actual_procedure_end, s.actual_room_out, s.schedule_status, s.delay_minutes,
+    `SELECT s.scheduled_start, s.estimated_duration_minutes, COALESCE(s.actual_room_in, (SELECT e.occurred_at FROM case_events e WHERE e.case_id = s.case_id AND e.event_type = 'ROOM_IN')) AS actual_room_in,
+            COALESCE(s.actual_procedure_start, (SELECT e.occurred_at FROM case_events e WHERE e.case_id = s.case_id AND e.event_type = 'INCISION')) AS actual_procedure_start,
+            COALESCE(s.actual_procedure_end, (SELECT e.occurred_at FROM case_events e WHERE e.case_id = s.case_id AND e.event_type = 'CLOSURE')) AS actual_procedure_end,
+            COALESCE(s.actual_room_out, (SELECT e.occurred_at FROM case_events e WHERE e.case_id = s.case_id AND e.event_type = 'ROOM_OUT')) AS actual_room_out, s.schedule_status, s.delay_minutes,
             r.name as room_name, dr.name as delay_reason, cr.name as cancellation_reason,
             c.case_id, c.case_number, c.case_type, c.case_status, c.planned_procedure_summary,
             spec.name as specialty_name,
@@ -252,7 +254,10 @@ async function getCase(db: Db, args: Args, entities: EntityMap) {
   const [schedule, checklist, intra, post, complications, teams] = await Promise.all([
     db.select<any>(
       `SELECT s.scheduled_date, s.scheduled_start, s.estimated_duration_minutes, s.schedule_status,
-              s.actual_room_in, s.actual_procedure_start, s.actual_procedure_end, s.actual_room_out,
+              COALESCE(s.actual_room_in, (SELECT e.occurred_at FROM case_events e WHERE e.case_id = s.case_id AND e.event_type = 'ROOM_IN')) AS actual_room_in,
+              COALESCE(s.actual_procedure_start, (SELECT e.occurred_at FROM case_events e WHERE e.case_id = s.case_id AND e.event_type = 'INCISION')) AS actual_procedure_start,
+              COALESCE(s.actual_procedure_end, (SELECT e.occurred_at FROM case_events e WHERE e.case_id = s.case_id AND e.event_type = 'CLOSURE')) AS actual_procedure_end,
+              COALESCE(s.actual_room_out, (SELECT e.occurred_at FROM case_events e WHERE e.case_id = s.case_id AND e.event_type = 'ROOM_OUT')) AS actual_room_out,
               s.delay_minutes, r.name as room, dr.name as delay_reason, cr.name as cancellation_reason
        FROM or_schedule s
        JOIN or_rooms r ON s.or_room_id = r.or_room_id
@@ -273,14 +278,16 @@ async function getCase(db: Db, args: Args, entities: EntityMap) {
     db.select<any>(
       `SELECT at.name as anesthesia_type, i.asa_classification, i.estimated_blood_loss_ml,
               i.blood_transfusion, i.units_transfused, i.specimen_collected, i.implant_used,
-              i.procedure_start, i.procedure_end
+              COALESCE(i.procedure_start, (SELECT e.occurred_at FROM case_events e WHERE e.case_id = i.case_id AND e.event_type = 'INCISION')) AS procedure_start,
+              COALESCE(i.procedure_end, (SELECT e.occurred_at FROM case_events e WHERE e.case_id = i.case_id AND e.event_type = 'CLOSURE')) AS procedure_end
        FROM intra_or_records i
        LEFT JOIN anesthesia_types at ON i.anesthesia_type_id = at.anesthesia_type_id
        WHERE i.case_id = ?`,
       [c.case_id]
     ),
     db.select<any>(
-      `SELECT r.pacu_admission, r.pacu_discharge, d.name as destination, r.post_op_status, r.pain_score,
+      `SELECT COALESCE(r.pacu_admission, (SELECT e.occurred_at FROM case_events e WHERE e.case_id = r.case_id AND e.event_type = 'PACU_IN')) AS pacu_admission,
+              COALESCE(r.pacu_discharge, (SELECT e.occurred_at FROM case_events e WHERE e.case_id = r.case_id AND e.event_type = 'PACU_OUT')) AS pacu_discharge, d.name as destination, r.post_op_status, r.pain_score,
               r.complications_present, r.icu_required, r.reoperation_required, r.mortality
        FROM post_or_records r
        LEFT JOIN post_op_destinations d ON r.post_op_destination_id = d.destination_id

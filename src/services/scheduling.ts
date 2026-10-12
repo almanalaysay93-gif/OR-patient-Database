@@ -229,6 +229,9 @@ export async function scheduleCase(
   const now = nowIso();
   const targetCase = await getCaseById(db, params.caseId);
   if (!targetCase) throw new Error("Case not found.");
+  if (!["PRE_OR", "NOT_READY", "READY", "SCHEDULED", "POSTPONED"].includes(targetCase.case_status)) {
+    throw new Error("Only a case that has not started can be booked. Move it back to Pre-Op first.");
+  }
 
   await db.transaction(async (tx) => {
     // Delete any old schedule for this case
@@ -257,7 +260,7 @@ export async function scheduleCase(
 
     // Update case status to SCHEDULED
     await tx.execute(
-      "UPDATE surgical_cases SET case_status = 'SCHEDULED', updated_by = ?, updated_at = ? WHERE case_id = ?",
+      "UPDATE surgical_cases SET case_status = 'SCHEDULED', status_reason = NULL, updated_by = ?, updated_at = ? WHERE case_id = ?",
       [params.userId || null, now, params.caseId]
     );
 

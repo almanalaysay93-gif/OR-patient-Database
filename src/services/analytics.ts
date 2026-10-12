@@ -67,15 +67,18 @@ export async function getAnalyticsSummary(
   filter?: { startDate?: string; endDate?: string; specialtyId?: string }
 ): Promise<AnalyticsSummary> {
   requirePermission("analytics.access", "patients.view");
+  // Same case date as the research export: the booked date, else the day the case was opened.
+  const caseDate = `COALESCE((SELECT s2.scheduled_date FROM or_schedule s2 WHERE s2.case_id = c.case_id
+    ORDER BY s2.created_at DESC LIMIT 1), substr(c.created_at, 1, 10))`;
   let caseWhere = "WHERE 1=1";
   const caseParams: any[] = [];
 
   if (filter?.startDate) {
-    caseWhere += " AND DATE(c.created_at) >= DATE(?)";
+    caseWhere += ` AND DATE(${caseDate}) >= DATE(?)`;
     caseParams.push(filter.startDate);
   }
   if (filter?.endDate) {
-    caseWhere += " AND DATE(c.created_at) <= DATE(?)";
+    caseWhere += ` AND DATE(${caseDate}) <= DATE(?)`;
     caseParams.push(filter.endDate);
   }
   if (filter?.specialtyId) {
@@ -189,10 +192,12 @@ export async function getAnalyticsSummary(
     else ageGroups["66+"]++;
   }
 
+  // Share of patients with a known age, so the groups add up to 100%.
+  const ageDenom = patientAges.length || 1;
   const ageDistribution = Object.entries(ageGroups).map(([group, count]) => ({
     group,
     count,
-    pct: Math.round((count / denom) * 100),
+    pct: Math.round((count / ageDenom) * 100),
   }));
 
   const ageStats = {
@@ -287,10 +292,12 @@ export async function getAnalyticsSummary(
      ORDER BY count DESC`,
     caseParams
   );
+  // Share of cases with a recorded destination, so the list adds up to 100%.
+  const destDenom = destRows.reduce((acc: number, d: any) => acc + d.count, 0) || 1;
   const destinations = destRows.map((d: any) => ({
     destination: d.destination,
     count: d.count,
-    pct: Math.round((d.count / caseDenom) * 100),
+    pct: Math.round((d.count / destDenom) * 100),
   }));
 
   // 8. Complications
@@ -315,10 +322,13 @@ export async function getAnalyticsSummary(
   );
   const casesWithComp = casesWithCompRows[0]?.count ?? 0;
 
+  // Only a case that reached theatre can have a complication; cancelled and waiting cases do not dilute the rate.
+  const operatedDenom = Math.max(
+    cases.filter((c) => ["IN_OR", "PACU", "POST_OR", "COMPLETED"].includes(c.case_status)).length, casesWithComp) || 1;
   const complicationsSummary = {
     totalComplications,
     casesWithComplications: casesWithComp,
-    complicationRatePct: Math.round((casesWithComp / caseDenom) * 100),
+    complicationRatePct: Math.round((casesWithComp / operatedDenom) * 100),
     byCategory: compRows.map((r: any) => ({ category: r.category, count: r.count })),
   };
 

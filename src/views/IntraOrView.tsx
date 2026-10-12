@@ -42,17 +42,16 @@ export const IntraOrView: React.FC = () => {
         setSurgicalCase(c);
         setAnesthesiaTypes(anes);
 
-        if (intra) {
-          setAnesthesiaTypeId(intra.anesthesia_type_id || "");
-          setAsaClass(intra.asa_classification || "");
-          setBloodLoss(intra.estimated_blood_loss_ml?.toString() || "");
-          setBloodTransfusion(intra.blood_transfusion === 1);
-          setUnitsTransfused(intra.units_transfused || 0);
-          setSpecimenCollected(intra.specimen_collected === 1);
-          setImplantUsed(intra.implant_used === 1);
-          setFindings(intra.operative_findings || "");
-          setNotes(intra.operative_notes || "");
-        }
+        // Always reset, so a case with no record yet never shows the previous case's values.
+        setAnesthesiaTypeId(intra?.anesthesia_type_id || "");
+        setAsaClass(intra?.asa_classification || "");
+        setBloodLoss(intra?.estimated_blood_loss_ml?.toString() || "");
+        setBloodTransfusion(intra?.blood_transfusion === 1);
+        setUnitsTransfused(intra?.units_transfused || 0);
+        setSpecimenCollected(intra?.specimen_collected === 1);
+        setImplantUsed(intra?.implant_used === 1);
+        setFindings(intra?.operative_findings || "");
+        setNotes(intra?.operative_notes || "");
       } catch (err) {
         console.error(err);
       }
@@ -117,10 +116,10 @@ export const IntraOrView: React.FC = () => {
               caseLabel={`${surgicalCase.case_number} - ${surgicalCase.patient_name}`}
               onDone={async () => { if (db) setSurgicalCase(await getCaseById(db, surgicalCase.case_id)); }}
             />
-            <span className="badge badge-warning">{surgicalCase.case_status}</span>
+            <span className="badge badge-warning">{surgicalCase.status_label || surgicalCase.case_status}</span>
           </div>
           <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
-            Procedure: <strong>{surgicalCase.planned_procedure_summary || "Unspecified"}</strong> &bull; Priority: {surgicalCase.case_type} &bull; Laterality: {surgicalCase.laterality || "N/A"}
+            Procedure: <strong>{surgicalCase.planned_procedure_summary || "Unspecified"}</strong> &bull; Specialty: {surgicalCase.specialty_name || "Not set"} &bull; Priority: {surgicalCase.case_type} &bull; Laterality: {surgicalCase.laterality || "N/A"}
           </p>
         </div>
 
@@ -166,6 +165,7 @@ export const IntraOrView: React.FC = () => {
               value={asaClass}
               onChange={(e) => setAsaClass(e.target.value)}
             >
+              <option value="">Not assessed</option>
               <option value="I">ASA I - Normal healthy patient</option>
               <option value="II">ASA II - Mild systemic disease</option>
               <option value="III">ASA III - Severe systemic disease</option>
@@ -174,6 +174,9 @@ export const IntraOrView: React.FC = () => {
               <option value="IE">ASA I-E (Emergency)</option>
               <option value="IIE">ASA II-E (Emergency)</option>
               <option value="IIIE">ASA III-E (Emergency)</option>
+              <option value="IVE">ASA IV-E (Emergency)</option>
+              <option value="VE">ASA V-E (Emergency)</option>
+              <option value="VI">ASA VI - Declared brain-dead organ donor</option>
             </select>
           </div>
 

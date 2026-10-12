@@ -6,6 +6,7 @@ import {
   Play,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
+import { localDate } from "../data/db";
 import { CaseActions } from "../components/clinical/CaseActions";
 import type { CaseStatus } from "../services/patients";
 import {
@@ -20,7 +21,7 @@ import { CaseEventsPanel } from "../components/clinical/CaseEventsPanel";
 
 export const ScheduleView: React.FC = () => {
   const { db, setView, setSelectedPatientId, setSelectedCaseId, notify } = useApp();
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(localDate());
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [rooms, setRooms] = useState<OrRoom[]>([]);
 
@@ -63,7 +64,7 @@ export const ScheduleView: React.FC = () => {
         `SELECT c.case_id, c.case_number, c.planned_procedure_summary, p.first_name, p.last_name
          FROM surgical_cases c
          JOIN patients p ON c.patient_id = p.patient_id
-         WHERE c.case_status IN ('PRE_OR', 'NOT_READY', 'READY')`
+         WHERE c.case_status IN ('PRE_OR', 'NOT_READY', 'READY', 'POSTPONED') AND p.is_active = 1`
       );
       setAvailableCases(rows);
       if (rows.length > 0) setSelectedCaseToSched(rows[0].case_id);
@@ -176,7 +177,7 @@ export const ScheduleView: React.FC = () => {
                     {room.name}
                   </span>
                   <span className="badge badge-neutral" style={{ fontSize: "11px" }}>
-                    {roomSchedules.length} Case(s)
+                    {roomSchedules.filter((s) => s.schedule_status !== "CANCELLED" && s.schedule_status !== "POSTPONED").length} Case(s)
                   </span>
                 </div>
 

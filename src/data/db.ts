@@ -94,3 +94,9 @@ export function nowIso(): string {
 
 export const bool = (v: boolean | null | undefined): number | null => (v == null ? null : v ? 1 : 0);
 export const toBool = (v: SqlValue | undefined): boolean => v === 1 || v === "1";
+
+/** Today (or the given moment) as YYYY-MM-DD in the local time zone, not UTC. */
+export function localDate(d: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}

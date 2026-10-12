@@ -70,16 +70,15 @@ export const PostOrView: React.FC = () => {
         setComplicationTypes(typesList);
         setComplications(compList);
 
-        if (post) {
-          setDestinationId(post.post_op_destination_id || "");
-          setPostOpStatus(post.post_op_status || "");
-          setPainScore(post.pain_score?.toString() || "");
-          setComplicationsPresent(post.complications_present === 1 || compList.length > 0);
-          setIcuRequired(post.icu_required === 1);
-          setReopRequired(post.reoperation_required === 1);
-          setMortality(post.mortality === 1);
-          setNotes(post.notes || "");
-        }
+        // Always reset, so a case with no record yet never shows the previous case's values.
+        setDestinationId(post?.post_op_destination_id || "");
+        setPostOpStatus(post?.post_op_status || "");
+        setPainScore(post?.pain_score?.toString() || "");
+        setComplicationsPresent(post?.complications_present === 1 || compList.length > 0);
+        setIcuRequired(post?.icu_required === 1);
+        setReopRequired(post?.reoperation_required === 1);
+        setMortality(post?.mortality === 1);
+        setNotes(post?.notes || "");
       } catch (err) {
         console.error(err);
       }
@@ -127,8 +126,11 @@ export const PostOrView: React.FC = () => {
       });
 
       setCompModalOpen(false);
+      setCompTypeId("");
+      setCompSeverity("MINOR");
       setCompDesc("");
       setCompIntervention("");
+      setCompOutcome("");
       setComplicationsPresent(true);
 
       const compList = await getComplicationsByCase(db, selectedCaseId);
@@ -197,11 +199,11 @@ export const PostOrView: React.FC = () => {
               onDone={async () => { if (db) setSurgicalCase(await getCaseById(db, surgicalCase.case_id)); }}
             />
             <span className={`badge ${isCompleted ? "badge-success" : "badge-warning"}`}>
-              {surgicalCase.case_status}
+              {surgicalCase.status_label || surgicalCase.case_status}
             </span>
           </div>
           <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
-            Procedure: <strong>{surgicalCase.planned_procedure_summary || "Unspecified"}</strong> &bull; Attending: {surgicalCase.specialty_name || "Surgical Service"}
+            Procedure: <strong>{surgicalCase.planned_procedure_summary || "Unspecified"}</strong> &bull; Specialty: {surgicalCase.specialty_name || "Not set"}
           </p>
         </div>
 
@@ -274,6 +276,10 @@ export const PostOrView: React.FC = () => {
             <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", fontWeight: 600 }}>
               <input type="checkbox" checked={reopRequired} onChange={(e) => setReopRequired(e.target.checked)} />
               <span>Unplanned Reoperation</span>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", fontWeight: 600 }}>
+              <input type="checkbox" checked={mortality} onChange={(e) => setMortality(e.target.checked)} />
+              <span>Patient Died (Perioperative Mortality)</span>
             </label>
           </div>
 

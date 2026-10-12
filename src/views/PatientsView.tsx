@@ -8,6 +8,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
+import { localDate } from "../data/db";
 import {
   listPatients,
   createPatient,
@@ -188,7 +189,7 @@ export const PatientsView: React.FC = () => {
       // Auto-create initial admission
       await createAdmission(db, {
         patientId: p.patient_id,
-        admissionDate: new Date().toISOString().split("T")[0],
+        admissionDate: localDate(),
         ward: "Surgical Inpatient",
       });
 
@@ -196,6 +197,8 @@ export const PatientsView: React.FC = () => {
       setCreatePatientOpen(false);
       setFn("");
       setLn("");
+      setMn("");
+      setContact("");
       setHrn("");
       setDob("");
       setSex("");
@@ -227,7 +230,11 @@ export const PatientsView: React.FC = () => {
 
       notify(`Surgical case ${newCase.case_number} created!`, "success");
       setCreateCaseOpen(false);
+      // Clear the whole form so the next case does not inherit this one's specialty or side.
       setProcedureSummary("");
+      setSpecialtyId("");
+      setCaseType("ELECTIVE");
+      setLaterality("NOT_APPLICABLE");
 
       // Refresh patient cases
       const caseList = await getCasesByPatient(db, activePatient.patient_id);
@@ -459,10 +466,11 @@ export const PatientsView: React.FC = () => {
                           {c.case_number}
                         </span>
                         <span className="badge badge-primary">{c.case_type}</span>
-                        <span className="badge badge-neutral">{c.case_status}</span>
+                        <span className="badge badge-neutral">{c.status_label || c.case_status}</span>
                       </div>
                       <div style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
                         {c.planned_procedure_summary || "Procedure summary pending"}
+                        {" "}&bull; {c.specialty_name || "No specialty set"}
                       </div>
                       {c.status_reason && (
                         <div style={{ fontSize: "12px", color: "var(--text-subtle)", marginTop: "4px" }}>
