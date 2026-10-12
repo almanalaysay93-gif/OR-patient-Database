@@ -8,7 +8,7 @@ describe("Database migrations", () => {
     const result = await runMigrations(db);
 
     expect(result.fromVersion).toBe(0);
-    expect(result.toVersion).toBe(13);
+    expect(result.toVersion).toBe(14);
     expect(result.applied).toEqual([
       "1_initial_schema",
       "2_seed_reference_data",
@@ -23,6 +23,7 @@ describe("Database migrations", () => {
       "11_force_admin_password_change",
       "12_archive_and_case_stage",
       "13_set_admin_password",
+      "14_laboratory_and_attachments",
     ]);
 
     // Check roles

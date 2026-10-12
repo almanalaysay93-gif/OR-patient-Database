@@ -25,6 +25,7 @@ import { getAuditHistory, type AuditEntry } from "../services/audit";
 import { CaseCodingPanel } from "../components/clinical/CaseCodingPanel";
 import { EditPatientDialog } from "../components/clinical/EditPatientDialog";
 import { CaseActions } from "../components/clinical/CaseActions";
+import { LaboratoryPanel } from "../components/clinical/LaboratoryPanel";
 import { archivePatient, listArchivedPatients, restorePatient, type ArchivedPatient } from "../services/patientArchive";
 
 export const PatientsView: React.FC = () => {
@@ -39,7 +40,7 @@ export const PatientsView: React.FC = () => {
   const [admissions, setAdmissions] = useState<Admission[]>([]);
   const [cases, setCases] = useState<SurgicalCase[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
-  const [profileTab, setProfileTab] = useState<"cases" | "admissions" | "audit">("cases");
+  const [profileTab, setProfileTab] = useState<"cases" | "admissions" | "labs" | "audit">("cases");
 
   // Archive patient
   const [editOpen, setEditOpen] = useState(false);
@@ -407,6 +408,13 @@ export const PatientsView: React.FC = () => {
                 Admissions ({admissions.length})
               </button>
               <button
+                onClick={() => setProfileTab("labs")}
+                className={`glass-btn ${profileTab === "labs" ? "glass-btn-primary" : "glass-btn-secondary"}`}
+                style={{ fontSize: "13px", padding: "6px 14px" }}
+              >
+                Labs &amp; Files
+              </button>
+              <button
                 onClick={() => setProfileTab("audit")}
                 className={`glass-btn ${profileTab === "audit" ? "glass-btn-primary" : "glass-btn-secondary"}`}
                 style={{ fontSize: "13px", padding: "6px 14px" }}
@@ -509,6 +517,15 @@ export const PatientsView: React.FC = () => {
                   </div>
                 ))}
               </div>
+            )}
+
+            {/* Tab: Labs & Files */}
+            {profileTab === "labs" && db && (
+              <LaboratoryPanel
+                db={db}
+                patientId={activePatient.patient_id}
+                cases={cases}
+              />
             )}
 
             {/* Tab: Audit History */}
