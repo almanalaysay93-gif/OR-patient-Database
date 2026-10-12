@@ -1,15 +1,10 @@
 import { argon2id } from "hash-wasm";
 import type { Db } from "../data/db";
 import { uuid, nowIso } from "../data/db";
+import { logAudit } from "./audit";
+import { type UserSession } from "./session";
 
-export interface UserSession {
-  userId: string;
-  username: string;
-  fullName: string;
-  roleId: string;
-  roleName: string;
-  permissions: string[];
-}
+export { hasPermission, type UserSession } from "./session";
 
 export interface UserRow {
   user_id: string;
@@ -105,89 +100,89 @@ export async function createInitialAdmin(
   return login(db, params.username, params.password);
 }
 
-export async function login(db: Db, username: string, plain: string): Promise<UserSession> {
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_MS = 60_000;
+const failures = new Map<string, { count: number; until: number }>();
+
+async function loadSession(db: Db, user: UserRow): Promise<UserSession> {
+  const perms = await db.select<{ permission_key: string }>(
+    "SELECT permission_key FROM role_permissions WHERE role_id = ?",
+    [user.role_id]
+  );
+  return {
+    userId: user.user_id,
+    username: user.username,
+    fullName: user.full_name,
+    roleId: user.role_id,
+    roleName: user.role_name,
+    permissions: perms.map((p) => p.permission_key),
+    mustChangePassword: user.must_change_password === 1,
+  };
+}
+
+async function findUser(db: Db, where: string, value: string): Promise<UserRow | undefined> {
   const rows = await db.select<UserRow>(
     `SELECT u.*, r.name as role_name
      FROM users u
      JOIN roles r ON u.role_id = r.role_id
-     WHERE u.username = ? AND u.active = 1`,
-    [username.trim()]
+     WHERE ${where}`,
+    [value]
   );
-  const user = rows[0];
-  if (!user) {
-    throw new Error("Invalid username or password.");
-  }
-
-  const valid = await verifyPassword(plain, user.password_hash);
-  if (!valid) {
-    throw new Error("Invalid username or password.");
-  }
-
-  const now = nowIso();
-  await db.execute("UPDATE users SET last_login_at = ? WHERE user_id = ?", [now, user.user_id]);
-
-  const perms = await db.select<{ permission_key: string }>(
-    "SELECT permission_key FROM role_permissions WHERE role_id = ?",
-    [user.role_id]
-  );
-
-  return {
-    userId: user.user_id,
-    username: user.username,
-    fullName: user.full_name,
-    roleId: user.role_id,
-    roleName: user.role_name,
-    permissions: perms.map((p) => p.permission_key),
-  };
+  return rows[0];
 }
 
-export function hasPermission(session: UserSession | null, permission: string): boolean {
-  if (!session) return false;
-  if (session.roleId === "role-admin") return true;
-  return session.permissions.includes(permission);
-}
-
-export async function getOrCreateActiveSession(db: Db): Promise<UserSession> {
-  const users = await db.select<UserRow>(
-    `SELECT u.*, r.name as role_name
-     FROM users u
-     JOIN roles r ON u.role_id = r.role_id
-     WHERE u.active = 1
-     ORDER BY CASE WHEN u.role_id = 'role-admin' THEN 0 ELSE 1 END, u.created_at ASC
-     LIMIT 1`
-  );
-
-  let user = users[0];
-  if (!user) {
-    const now = nowIso();
-    const userId = "usr-admin";
-    await db.execute(
-      `INSERT OR IGNORE INTO users (user_id, username, full_name, password_hash, role_id, active, must_change_password, created_at, updated_at)
-       VALUES (?, 'admin', 'Clinical Administrator', '', 'role-admin', 1, 0, ?, ?)`,
-      [userId, now, now]
-    );
-    await db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('setup_complete', '1')");
-    const fresh = await db.select<UserRow>(
-      `SELECT u.*, r.name as role_name
-       FROM users u
-       JOIN roles r ON u.role_id = r.role_id
-       WHERE u.user_id = ?`,
-      [userId]
-    );
-    user = fresh[0];
+export async function login(db: Db, username: string, plain: string, now: number = Date.now()): Promise<UserSession> {
+  const key = username.trim().toLowerCase();
+  const failed = failures.get(key);
+  if (failed && failed.until > now) {
+    throw new Error(`Too many failed attempts. Try again in ${Math.ceil((failed.until - now) / 1000)} seconds.`);
   }
 
-  const perms = await db.select<{ permission_key: string }>(
-    "SELECT permission_key FROM role_permissions WHERE role_id = ?",
-    [user.role_id]
-  );
+  const user = await findUser(db, "u.username = ?", username.trim());
+  // An empty hash never verifies, so accounts without a password cannot sign in.
+  const valid = !!user && user.active === 1 && (await verifyPassword(plain, user.password_hash));
+  if (!user || !valid) {
+    const expired = !!failed && failed.count >= MAX_FAILED_ATTEMPTS;
+    const count = (expired ? 0 : failed?.count ?? 0) + 1;
+    failures.set(key, { count, until: count >= MAX_FAILED_ATTEMPTS ? now + LOCKOUT_MS : 0 });
+    await logAudit(db, {
+      userId: user?.user_id ?? null, action: "LOGIN_FAILED", entityType: "USER",
+      recordId: user?.user_id ?? null, newValue: username.trim().slice(0, 80),
+    });
+    throw new Error("Invalid username or password.");
+  }
+  failures.delete(key);
 
-  return {
-    userId: user.user_id,
-    username: user.username,
-    fullName: user.full_name,
-    roleId: user.role_id,
-    roleName: user.role_name,
-    permissions: perms.map((p) => p.permission_key),
-  };
+  await db.execute("UPDATE users SET last_login_at = ? WHERE user_id = ?", [nowIso(), user.user_id]);
+  await logAudit(db, { userId: user.user_id, action: "LOGIN", entityType: "USER", recordId: user.user_id });
+  return loadSession(db, user);
+}
+
+/** Re-checks the password of the user who is already signed in (idle lock screen). */
+export async function unlockSession(db: Db, session: UserSession, plain: string): Promise<UserSession> {
+  const user = await findUser(db, "u.user_id = ?", session.userId);
+  if (!user || user.active !== 1) throw new Error("This account is no longer active.");
+  if (!(await verifyPassword(plain, user.password_hash))) {
+    await logAudit(db, { userId: user.user_id, action: "UNLOCK_FAILED", entityType: "USER", recordId: user.user_id });
+    throw new Error("Incorrect password.");
+  }
+  await logAudit(db, { userId: user.user_id, action: "UNLOCK", entityType: "USER", recordId: user.user_id });
+  // Role or permissions may have changed while the screen was locked.
+  return loadSession(db, user);
+}
+
+export async function recordSessionEvent(
+  db: Db, session: UserSession, action: "LOGOUT" | "IDLE_LOCK" | "MANUAL_LOCK",
+): Promise<void> {
+  await logAudit(db, { userId: session.userId, action, entityType: "USER", recordId: session.userId });
+}
+
+export function validatePassword(plain: string): void {
+  if (plain.length < 8) throw new Error("Password must be at least 8 characters.");
+}
+
+export async function getIdleLockMinutes(db: Db): Promise<number> {
+  const rows = await db.select<{ value: string }>("SELECT value FROM app_settings WHERE key = 'idle_lock_minutes'");
+  const n = Number(rows[0]?.value);
+  return Number.isFinite(n) && n > 0 ? n : 60;
 }

@@ -6,6 +6,8 @@ import {
   Play,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
+import { CaseActions } from "../components/clinical/CaseActions";
+import type { CaseStatus } from "../services/patients";
 import {
   getScheduleByDate,
   scheduleCase,
@@ -197,7 +199,12 @@ export const ScheduleView: React.FC = () => {
                         <span style={{ fontWeight: 700, color: "var(--primary)", fontSize: "13px" }}>
                           {s.scheduled_start} - {s.scheduled_end} ({s.estimated_duration_minutes}m)
                         </span>
-                        <span className="badge badge-primary">{s.case_number}</span>
+                        <span style={{ display: "flex", gap: "6px" }}>
+                          {(s.schedule_status === "CANCELLED" || s.schedule_status === "POSTPONED") && (
+                            <span className="badge badge-danger">{s.schedule_status}</span>
+                          )}
+                          <span className="badge badge-primary">{s.case_number}</span>
+                        </span>
                       </div>
 
                       <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-main)" }}>
@@ -232,6 +239,12 @@ export const ScheduleView: React.FC = () => {
                           <span>Intra-OR</span>
                         </button>
                       </div>
+                      {s.case_status && (
+                        <CaseActions
+                          caseId={s.case_id} status={s.case_status as CaseStatus}
+                          caseLabel={`${s.case_number} - ${s.patient_name}`} onDone={loadData}
+                        />
+                      )}
                     </div>
                   ))}
 

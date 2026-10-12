@@ -1,6 +1,7 @@
 import type { Db } from "../data/db";
 import { nowIso } from "../data/db";
 import { logAudit } from "./audit";
+import { requirePermission } from "./session";
 import { getCaseById } from "./patients";
 
 export interface PreopBaseline {
@@ -17,6 +18,7 @@ export interface PreopBaseline {
 }
 
 export async function getPreopBaseline(db: Db, caseId: string): Promise<PreopBaseline | null> {
+  requirePermission("patients.view");
   const rows = await db.select<PreopBaseline>("SELECT * FROM case_preop_baseline WHERE case_id = ?", [caseId]);
   return rows[0] || null;
 }
@@ -25,6 +27,7 @@ export async function savePreopBaseline(
   db: Db,
   params: Omit<PreopBaseline, "case_id" | "assessed_at" | "assessed_by"> & { caseId: string; userId?: string | null },
 ): Promise<void> {
+  params = { ...params, userId: requirePermission("preor.edit") };
   const c = await getCaseById(db, params.caseId);
   if (!c) throw new Error("Surgical case not found.");
   if (params.height_cm != null && (params.height_cm <= 0 || params.height_cm >= 300)) throw new Error("Height must be between 0 and 300 cm.");

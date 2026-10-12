@@ -38,6 +38,8 @@ export interface AdapterOptions {
   kind: Db["kind"];
   backupDir: string | null;
   supportsBackup: boolean;
+  /** Writes the backup file itself. Without it the backup is a plain `VACUUM INTO` copy. */
+  backup?: (path: string) => Promise<void>;
   afterWrite?: () => void;
 }
 
@@ -75,7 +77,8 @@ export function wrapRaw(raw: RawDb, opts: AdapterOptions): Db {
     backupTo: (path) =>
       lock.run(async () => {
         if (!opts.supportsBackup) return false;
-        await raw.execute("VACUUM INTO ?", [path]);
+        if (opts.backup) await opts.backup(path);
+        else await raw.execute("VACUUM INTO ?", [path]);
         return true;
       }),
   };

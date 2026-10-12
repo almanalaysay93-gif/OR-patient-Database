@@ -1,6 +1,7 @@
 import type { Db, RawDb } from "../data/db";
 import { nowIso, uuid } from "../data/db";
 import { logAudit } from "./audit";
+import { requirePermission } from "./session";
 import { getCaseById } from "./patients";
 import { validClinicalTimestamp } from "./caseEvents";
 
@@ -36,6 +37,7 @@ export async function getCaseFollowup(db: Db, caseId: string): Promise<{
   assessments: FollowupAssessment[];
   outcomes: PostoperativeOutcome[];
 }> {
+  requirePermission("patients.view");
   const [assessments, outcomes] = await Promise.all([
     db.select<FollowupAssessment>(
       "SELECT * FROM case_followup_assessments WHERE case_id = ? ORDER BY target_day", [caseId]),
@@ -80,13 +82,14 @@ export async function createFollowupIfDue(
 }
 
 export async function ensureFollowup(db: Db, caseId: string, targetDay: 30 | 90 = 30): Promise<FollowupAssessment> {
+  const userId = requirePermission("postor.edit");
   const c = await getCaseById(db, caseId);
   if (!c) throw new Error("Surgical case not found.");
   const existing = await db.select<FollowupAssessment>(
     "SELECT * FROM case_followup_assessments WHERE case_id = ? AND target_day = ?", [caseId, targetDay]);
   if (existing[0]) return existing[0];
   const followupId = await db.transaction((tx) =>
-    createFollowupIfDue(tx, { caseId, patientId: c.patient_id, targetDay }));
+    createFollowupIfDue(tx, { caseId, patientId: c.patient_id, targetDay, userId }));
   if (!followupId) throw new Error("Record a dated incision or room entry before creating follow-up.");
   const rows = await db.select<FollowupAssessment>(
     "SELECT * FROM case_followup_assessments WHERE followup_id = ?", [followupId]);
@@ -104,6 +107,7 @@ export async function saveFollowupAssessment(
     userId?: string | null;
   },
 ): Promise<void> {
+  params = { ...params, userId: requirePermission("postor.edit") };
   const rows = await db.select<FollowupAssessment>(
     "SELECT * FROM case_followup_assessments WHERE followup_id = ?", [params.followupId]);
   const old = rows[0];
@@ -144,6 +148,7 @@ export async function addPostoperativeOutcome(
     userId?: string | null;
   },
 ): Promise<string> {
+  params = { ...params, userId: requirePermission("postor.edit") };
   if (!validClinicalTimestamp(params.occurredAt)) throw new Error("Enter a full event date and time.");
   if (params.detectedAt && !validClinicalTimestamp(params.detectedAt)) throw new Error("Enter a full detection date and time.");
   if (params.eventType === "SURGICAL_SITE_INFECTION" && (!params.ssiType || !params.evidenceSource?.trim())) {
@@ -193,6 +198,7 @@ export async function addPostoperativeOutcome(
 export async function getFollowupQueue(db: Db): Promise<{
   case_id: string; case_number: string; patient_name: string; due_date: string | null; status: string;
 }[]> {
+  requirePermission("patients.view");
   return db.select(
     `SELECT c.case_id, c.case_number, p.last_name || ', ' || p.first_name AS patient_name,
        f.due_date, COALESCE(f.status, 'NOT_CREATED') AS status

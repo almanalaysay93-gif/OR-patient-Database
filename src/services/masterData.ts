@@ -1,6 +1,7 @@
 import type { Db } from "../data/db";
 import { uuid, nowIso } from "../data/db";
 import { logAudit } from "./audit";
+import { requirePermission, requireSession } from "./session";
 
 export interface MasterItem {
   id: string;
@@ -77,16 +78,19 @@ export interface NamedEntity {
 }
 
 export async function getSpecialties(db: Db, onlyActive = true): Promise<Specialty[]> {
+  requireSession();
   const sql = `SELECT * FROM specialties ${onlyActive ? "WHERE active = 1" : ""} ORDER BY display_order, name`;
   return db.select<Specialty>(sql);
 }
 
 export async function getProcedures(db: Db, onlyActive = true): Promise<Procedure[]> {
+  requireSession();
   const sql = `SELECT * FROM procedures ${onlyActive ? "WHERE active = 1" : ""} ORDER BY procedure_name`;
   return db.select<Procedure>(sql);
 }
 
 export async function getDiagnoses(db: Db, onlyActive = true): Promise<Diagnosis[]> {
+  requireSession();
   const sql = `SELECT * FROM diagnoses ${onlyActive ? "WHERE active = 1" : ""} ORDER BY diagnosis_name`;
   return db.select<Diagnosis>(sql);
 }
@@ -94,6 +98,7 @@ export async function getDiagnoses(db: Db, onlyActive = true): Promise<Diagnosis
 export async function createProcedure(
   db: Db, params: { name: string; code?: string | null; codeSystem?: string | null; userId?: string | null },
 ): Promise<Procedure> {
+  params = { ...params, userId: requirePermission("masterdata.manage", "cases.edit") };
   const name = params.name.trim();
   if (!name) throw new Error("Procedure name is required.");
   const id = uuid();
@@ -113,6 +118,7 @@ export async function createProcedure(
 export async function createDiagnosis(
   db: Db, params: { name: string; code?: string | null; codeSystem?: string | null; userId?: string | null },
 ): Promise<Diagnosis> {
+  params = { ...params, userId: requirePermission("masterdata.manage", "cases.edit") };
   const name = params.name.trim();
   if (!name) throw new Error("Diagnosis name is required.");
   const id = uuid();
@@ -130,45 +136,53 @@ export async function createDiagnosis(
 }
 
 export async function getOrRooms(db: Db, onlyActive = true): Promise<OrRoom[]> {
+  requireSession();
   const sql = `SELECT * FROM or_rooms ${onlyActive ? "WHERE active = 1" : ""} ORDER BY display_order, name`;
   return db.select<OrRoom>(sql);
 }
 
 export async function getStaff(db: Db, onlyActive = true): Promise<StaffMember[]> {
+  requireSession();
   const sql = `SELECT * FROM staff ${onlyActive ? "WHERE active = 1" : ""} ORDER BY full_name`;
   return db.select<StaffMember>(sql);
 }
 
 export async function getTeamRoles(db: Db, onlyActive = true): Promise<TeamRole[]> {
+  requireSession();
   const sql = `SELECT * FROM team_roles ${onlyActive ? "WHERE active = 1" : ""} ORDER BY display_order`;
   return db.select<TeamRole>(sql);
 }
 
 export async function getAnesthesiaTypes(db: Db, onlyActive = true): Promise<NamedEntity[]> {
+  requireSession();
   return db.select<NamedEntity>(
     `SELECT anesthesia_type_id as id, name, active, display_order FROM anesthesia_types ${onlyActive ? "WHERE active = 1" : ""} ORDER BY display_order`
   );
 }
 
 export async function getPostOpDestinations(db: Db, onlyActive = true): Promise<NamedEntity[]> {
+  requireSession();
   return db.select<NamedEntity>(
     `SELECT destination_id as id, name, active, display_order FROM post_op_destinations ${onlyActive ? "WHERE active = 1" : ""} ORDER BY display_order`
   );
 }
 
 export async function getComplicationTypes(db: Db, onlyActive = true): Promise<{ complication_type_id: string; name: string; category: string; active: number }[]> {
+  requireSession();
   return db.select(
     `SELECT complication_type_id, name, category, active FROM complication_types ${onlyActive ? "WHERE active = 1" : ""} ORDER BY category, name`
   );
 }
 
 export async function getDelayReasons(db: Db, onlyActive = true): Promise<NamedEntity[]> {
+  requireSession();
   return db.select<NamedEntity>(
     `SELECT delay_reason_id as id, name, active, display_order FROM delay_reasons ${onlyActive ? "WHERE active = 1" : ""} ORDER BY display_order`
   );
 }
 
 export async function getCancellationReasons(db: Db, onlyActive = true): Promise<NamedEntity[]> {
+  requireSession();
   return db.select<NamedEntity>(
     `SELECT cancellation_reason_id as id, name, active, display_order FROM cancellation_reasons ${onlyActive ? "WHERE active = 1" : ""} ORDER BY display_order`
   );
@@ -184,6 +198,7 @@ export async function seedInitialFacilityData(
     staffMembers: { name: string; role: string }[];
   }
 ): Promise<void> {
+  requirePermission("masterdata.manage");
   const now = nowIso();
   await db.transaction(async (tx) => {
     await tx.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('facility_name', ?)", [params.facilityName]);
@@ -216,5 +231,53 @@ export async function seedInitialFacilityData(
         [uuid(), `EMP-${(i + 1).toString().padStart(4, "0")}`, s.name.trim(), s.role, now, now]
       );
     }
+  });
+}
+
+async function addNamedRow(
+  db: Db,
+  kind: { table: "or_rooms" | "specialties"; idColumn: string; action: string; entity: string; label: string },
+  name: string,
+): Promise<string> {
+  const userId = requirePermission("masterdata.manage");
+  const clean = name.trim();
+  if (!clean) throw new Error(`Enter a ${kind.label} name.`);
+  const dup = await db.select<{ n: number }>(
+    `SELECT COUNT(*) AS n FROM ${kind.table} WHERE name = ? COLLATE NOCASE`, [clean]);
+  if (dup[0]?.n) throw new Error(`This ${kind.label} already exists.`);
+  const id = uuid();
+  const extra = kind.table === "or_rooms" ? `Operating Suite - ${clean}` : clean.substring(0, 4).toUpperCase();
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      `INSERT INTO ${kind.table} (${kind.idColumn}, name, ${kind.table === "or_rooms" ? "description" : "code"}, active, display_order)
+       VALUES (?, ?, ?, 1, (SELECT COALESCE(MAX(display_order), 0) + 1 FROM ${kind.table}))`,
+      [id, clean, extra]);
+    await logAudit(tx, { userId, action: kind.action, entityType: kind.entity, recordId: id, newValue: clean });
+  });
+  return id;
+}
+
+export function addOrRoom(db: Db, name: string): Promise<string> {
+  return addNamedRow(db, { table: "or_rooms", idColumn: "or_room_id", action: "ADD_OR_ROOM", entity: "OR_ROOM", label: "room" }, name);
+}
+
+export function addSpecialty(db: Db, name: string): Promise<string> {
+  return addNamedRow(db, { table: "specialties", idColumn: "specialty_id", action: "ADD_SPECIALTY", entity: "SPECIALTY", label: "specialty" }, name);
+}
+
+export async function saveFacilityProfile(
+  db: Db, params: { facilityName: string; departmentName: string },
+): Promise<void> {
+  const userId = requirePermission("masterdata.manage");
+  const facility = params.facilityName.trim();
+  const department = params.departmentName.trim();
+  if (!facility) throw new Error("Facility name is required.");
+  await db.transaction(async (tx) => {
+    await tx.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('facility_name', ?)", [facility]);
+    await tx.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('department_name', ?)", [department]);
+    await logAudit(tx, {
+      userId, action: "SAVE_FACILITY_PROFILE", entityType: "APP_SETTINGS",
+      newValue: JSON.stringify({ facility, department }),
+    });
   });
 }

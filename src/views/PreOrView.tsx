@@ -4,6 +4,7 @@ import {
   X,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
+import { CaseActions } from "../components/clinical/CaseActions";
 import {
   getPreOrBoardCases,
   getPreOrChecklist,
@@ -168,6 +169,10 @@ export const PreOrView: React.FC = () => {
                       <span>Case: {c.case_number}</span>
                       <span>{c.room_name || "Unassigned"}</span>
                     </div>
+                    <CaseActions
+                      caseId={c.case_id} status={c.case_status}
+                      caseLabel={`${c.case_number} - ${c.patient_name}`} onDone={loadBoard}
+                    />
                   </div>
                 ))}
               </div>

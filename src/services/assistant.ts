@@ -13,6 +13,7 @@ import {
 } from "date-fns";
 import type { Db } from "../data/db";
 import { CASE_STATUSES, executeTool, type EntityMap } from "./assistantTools";
+import { requirePermission } from "./session";
 
 /**
  * Offline assistant: answers questions about the local database with keyword rules.
@@ -378,6 +379,7 @@ const STATUS_WORDS: [RegExp, string][] = [
 
 /** Answer one question from the local database. `entities` collects the records the answer mentions. */
 export async function answerQuestion(db: Db, question: string, entities: EntityMap, now: Date = new Date()): Promise<string> {
+  requirePermission("patients.view");
   const text = question.trim();
   const t = text.toLowerCase();
   if (!text) return HELP_TEXT;

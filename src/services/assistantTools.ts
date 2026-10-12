@@ -2,6 +2,7 @@ import type { Db } from "../data/db";
 import { calculateAge, formatResearchId } from "./patients";
 import { getAnalyticsSummary } from "./analytics";
 import { computeReadiness, type ChecklistItemValue } from "./preOr";
+import { requirePermission } from "./session";
 
 /**
  * Read-only lookups behind the offline assistant.
@@ -530,6 +531,7 @@ async function getPreOrReadiness(db: Db, entities: EntityMap) {
 
 /** Run one lookup by name. Throws a readable message when the arguments are invalid. */
 export async function executeTool(db: Db, name: string, args: Args, entities: EntityMap): Promise<unknown> {
+  requirePermission("patients.view");
   switch (name) {
     case "get_or_schedule":
       return getOrSchedule(db, args, entities);

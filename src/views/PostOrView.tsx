@@ -5,6 +5,7 @@ import {
   CheckCheck,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
+import { CaseActions } from "../components/clinical/CaseActions";
 import {
   getPostOrRecord,
   savePostOrRecord,
@@ -190,6 +191,11 @@ export const PostOrView: React.FC = () => {
               Post-OR & PACU: {surgicalCase.patient_name}
             </h1>
             <span className="badge badge-primary">{surgicalCase.case_number}</span>
+            <CaseActions
+              caseId={surgicalCase.case_id} status={surgicalCase.case_status}
+              caseLabel={`${surgicalCase.case_number} - ${surgicalCase.patient_name}`}
+              onDone={async () => { if (db) setSurgicalCase(await getCaseById(db, surgicalCase.case_id)); }}
+            />
             <span className={`badge ${isCompleted ? "badge-success" : "badge-warning"}`}>
               {surgicalCase.case_status}
             </span>

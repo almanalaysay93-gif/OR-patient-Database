@@ -1,5 +1,6 @@
 import type { Db } from "../data/db";
 import { calculateAge } from "./patients";
+import { requirePermission } from "./session";
 
 export interface AnalyticsSummary {
   uniquePatients: number;
@@ -65,6 +66,7 @@ export async function getAnalyticsSummary(
   db: Db,
   filter?: { startDate?: string; endDate?: string; specialtyId?: string }
 ): Promise<AnalyticsSummary> {
+  requirePermission("analytics.access", "patients.view");
   let caseWhere = "WHERE 1=1";
   const caseParams: any[] = [];
 

@@ -5,6 +5,7 @@ import {
   User,
   ArrowRight,
   X,
+  Pencil,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import {
@@ -22,9 +23,12 @@ import {
 import { getSpecialties, type Specialty } from "../services/masterData";
 import { getAuditHistory, type AuditEntry } from "../services/audit";
 import { CaseCodingPanel } from "../components/clinical/CaseCodingPanel";
+import { EditPatientDialog } from "../components/clinical/EditPatientDialog";
+import { CaseActions } from "../components/clinical/CaseActions";
+import { archivePatient, listArchivedPatients, restorePatient, type ArchivedPatient } from "../services/patientArchive";
 
 export const PatientsView: React.FC = () => {
-  const { db, selectedPatientId, setSelectedPatientId, setSelectedCaseId, setView, notify } = useApp();
+  const { db, can, selectedPatientId, setSelectedPatientId, setSelectedCaseId, setView, notify } = useApp();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -36,6 +40,14 @@ export const PatientsView: React.FC = () => {
   const [cases, setCases] = useState<SurgicalCase[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
   const [profileTab, setProfileTab] = useState<"cases" | "admissions" | "audit">("cases");
+
+  // Archive patient
+  const [editOpen, setEditOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archiveReason, setArchiveReason] = useState("");
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [archivedOpen, setArchivedOpen] = useState(false);
+  const [archived, setArchived] = useState<ArchivedPatient[]>([]);
 
   // Create Patient modal
   const [createPatientOpen, setCreatePatientOpen] = useState(false);
@@ -76,6 +88,48 @@ export const PatientsView: React.FC = () => {
     loadList();
   }, [db, search]);
 
+  const reloadCases = async () => {
+    if (!db || !selectedPatientId) return;
+    setCases(await getCasesByPatient(db, selectedPatientId));
+    if (can("audit.view")) setAuditLogs(await getAuditHistory(db, { patientId: selectedPatientId }));
+  };
+
+  const handleArchive = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db || !activePatient) return;
+    try {
+      await archivePatient(db, activePatient.patient_id, archiveReason);
+      notify(`${activePatient.full_name} archived.`, "success");
+      setArchiveOpen(false);
+      setSelectedPatientId(null);
+      await loadList();
+    } catch (err) {
+      setArchiveError((err as Error).message);
+    }
+  };
+
+  const openArchived = async () => {
+    if (!db) return;
+    try {
+      setArchived(await listArchivedPatients(db));
+      setArchivedOpen(true);
+    } catch (err) {
+      notify((err as Error).message, "error");
+    }
+  };
+
+  const handleRestore = async (patientId: string) => {
+    if (!db) return;
+    try {
+      await restorePatient(db, patientId);
+      notify("Patient restored.", "success");
+      setArchived(await listArchivedPatients(db));
+      await loadList();
+    } catch (err) {
+      notify((err as Error).message, "error");
+    }
+  };
+
   useEffect(() => {
     if (db) {
       getSpecialties(db).then(setSpecialties).catch(console.error);
@@ -96,7 +150,7 @@ export const PatientsView: React.FC = () => {
           getPatientById(db, selectedPatientId),
           getAdmissionsByPatient(db, selectedPatientId),
           getCasesByPatient(db, selectedPatientId),
-          getAuditHistory(db, { patientId: selectedPatientId }),
+          can("audit.view") ? getAuditHistory(db, { patientId: selectedPatientId }) : Promise.resolve([]),
         ]);
         setActivePatient(p);
         setAdmissions(admList);
@@ -194,14 +248,19 @@ export const PatientsView: React.FC = () => {
             Single persistent record per patient with multiple admissions and surgical procedures.
           </p>
         </div>
-        <button
-          onClick={() => setCreatePatientOpen(true)}
-          className="glass-btn glass-btn-primary"
-          style={{ gap: "8px" }}
-        >
-          <Plus size={16} />
-          <span>Register New Patient</span>
-        </button>
+        <div style={{ display: "flex", gap: "10px" }}>
+          {can("patients.archive") && (
+            <button onClick={openArchived} className="glass-btn glass-btn-secondary">Archived patients</button>
+          )}
+          <button
+            onClick={() => setCreatePatientOpen(true)}
+            className="glass-btn glass-btn-primary"
+            style={{ gap: "8px" }}
+          >
+            <Plus size={16} />
+            <span>Register New Patient</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Grid: Patients Table + Profile Details Pane */}
@@ -307,9 +366,28 @@ export const PatientsView: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <button onClick={() => setSelectedPatientId(null)} className="glass-btn glass-btn-secondary" style={{ padding: "6px" }}>
-                <X size={16} />
-              </button>
+              <div style={{ display: "flex", gap: "8px" }}>
+                {can("patients.edit_demographics") && (
+                  <button
+                    onClick={() => setEditOpen(true)}
+                    className="glass-btn glass-btn-secondary" style={{ fontSize: "12px", padding: "6px 10px", gap: "6px" }}
+                  >
+                    <Pencil size={13} />
+                    <span>Edit details</span>
+                  </button>
+                )}
+                {can("patients.archive") && (
+                  <button
+                    onClick={() => { setArchiveReason(""); setArchiveError(null); setArchiveOpen(true); }}
+                    className="glass-btn glass-btn-danger" style={{ fontSize: "12px", padding: "6px 10px" }}
+                  >
+                    Archive patient
+                  </button>
+                )}
+                <button onClick={() => setSelectedPatientId(null)} aria-label="Close patient record" className="glass-btn glass-btn-secondary" style={{ padding: "6px" }}>
+                  <X size={16} />
+                </button>
+              </div>
             </div>
 
             {/* Profile Tabs */}
@@ -378,8 +456,17 @@ export const PatientsView: React.FC = () => {
                       <div style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
                         {c.planned_procedure_summary || "Procedure summary pending"}
                       </div>
+                      {c.status_reason && (
+                        <div style={{ fontSize: "12px", color: "var(--text-subtle)", marginTop: "4px" }}>
+                          Reason: {c.status_reason}
+                        </div>
+                      )}
                     </div>
-                    <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <CaseActions
+                        caseId={c.case_id} status={c.case_status}
+                        caseLabel={`${c.case_number} - ${activePatient.full_name}`} onDone={reloadCases}
+                      />
                       <button onClick={() => setCodingCaseId(c.case_id)} className="glass-btn glass-btn-secondary"
                         style={{ fontSize: "12px" }}>Code case</button>
                       <button
@@ -454,6 +541,72 @@ export const PatientsView: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Modal: Archive Patient */}
+      {archiveOpen && activePatient && (
+        <div role="dialog" aria-modal="true" aria-label="Archive patient" style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+          <form onSubmit={handleArchive} className="glass-card" style={{ width: "100%", maxWidth: "480px", padding: "28px", display: "flex", flexDirection: "column", gap: "14px" }}>
+            <h2 style={{ fontSize: "18px", fontWeight: 800 }}>Archive patient</h2>
+            <div style={{ fontSize: "13px", fontWeight: 600 }}>{activePatient.full_name} &bull; HRN {activePatient.hrn || "None"}</div>
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>
+              The patient is hidden from lists and search. Nothing is deleted: admissions, cases and the audit trail are kept,
+              and the patient can be restored from Archived patients.
+            </p>
+            <div>
+              <label htmlFor="archive-reason" style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
+                Reason (required, saved in the audit trail)
+              </label>
+              <textarea id="archive-reason" className="glass-input" autoFocus rows={3} value={archiveReason} onChange={(e) => setArchiveReason(e.target.value)} />
+            </div>
+            {archiveError && <div role="alert" style={{ fontSize: "13px", color: "var(--danger)", fontWeight: 600 }}>{archiveError}</div>}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button type="button" className="glass-btn glass-btn-secondary" onClick={() => setArchiveOpen(false)}>Back</button>
+              <button type="submit" className="glass-btn glass-btn-danger" disabled={archiveReason.trim().length < 3}>Archive patient</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal: Archived Patients */}
+      {archivedOpen && (
+        <div role="dialog" aria-modal="true" aria-label="Archived patients" style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+          <div className="glass-card" style={{ width: "100%", maxWidth: "640px", maxHeight: "80vh", overflowY: "auto", padding: "28px", display: "flex", flexDirection: "column", gap: "14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2 style={{ fontSize: "18px", fontWeight: 800 }}>Archived patients ({archived.length})</h2>
+              <button onClick={() => setArchivedOpen(false)} aria-label="Close" className="glass-btn glass-btn-secondary" style={{ padding: "6px" }}>
+                <X size={16} />
+              </button>
+            </div>
+            {archived.length === 0 && (
+              <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>No archived patients.</div>
+            )}
+            {archived.map((a) => (
+              <div key={a.patient_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", border: "1px solid var(--border-subtle)", borderRadius: "12px", padding: "12px" }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: "14px" }}>{a.last_name}, {a.first_name} &bull; HRN {a.hrn || "None"}</div>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "4px" }}>
+                    Archived {a.archived_at ? new Date(a.archived_at).toLocaleString() : ""} by {a.archived_by_name || "unknown"}: {a.archive_reason}
+                  </div>
+                </div>
+                <button onClick={() => handleRestore(a.patient_id)} className="glass-btn glass-btn-primary" style={{ fontSize: "12px" }}>Restore</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {editOpen && activePatient && (
+        <EditPatientDialog
+          patient={activePatient}
+          onClose={() => setEditOpen(false)}
+          onSaved={async (saved) => {
+            setEditOpen(false);
+            setActivePatient(saved);
+            await loadList();
+            if (db && can("audit.view")) setAuditLogs(await getAuditHistory(db, { patientId: saved.patient_id }));
+          }}
+        />
+      )}
 
       {/* Modal: Create Patient */}
       {createPatientOpen && (

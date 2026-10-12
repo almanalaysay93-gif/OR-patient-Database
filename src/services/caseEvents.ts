@@ -1,6 +1,7 @@
 import type { Db } from "../data/db";
 import { nowIso, uuid } from "../data/db";
 import { logAudit } from "./audit";
+import { requirePermission } from "./session";
 import { getCaseById } from "./patients";
 
 export type CaseEventType = "ROOM_IN" | "ANESTHESIA_START" | "INCISION" | "CLOSURE" | "ROOM_OUT" | "PACU_IN" | "PACU_OUT";
@@ -19,6 +20,7 @@ export interface CaseEvent {
 }
 
 export async function getCaseEvents(db: Db, caseId: string): Promise<CaseEvent[]> {
+  requirePermission("patients.view");
   return db.select<CaseEvent>("SELECT * FROM case_events WHERE case_id = ? ORDER BY occurred_at", [caseId]);
 }
 
@@ -31,6 +33,7 @@ export async function saveCaseEvent(
   db: Db,
   params: { caseId: string; eventType: CaseEventType; occurredAt: string; correctionReason?: string | null; userId?: string | null },
 ): Promise<void> {
+  params = { ...params, userId: requirePermission("intraor.edit", "postor.edit") };
   if (!CASE_EVENT_TYPES.includes(params.eventType)) throw new Error("Invalid event type.");
   if (!validClinicalTimestamp(params.occurredAt)) throw new Error("Enter a full date and time with a time zone.");
   const c = await getCaseById(db, params.caseId);
@@ -83,6 +86,7 @@ export function minutesBetween(start: string | null | undefined, end: string | n
 }
 
 export async function getRoomTurnover(db: Db, caseId: string): Promise<number | null> {
+  requirePermission("patients.view");
   const rows = await db.select<{ current_in: string; previous_out: string | null }>(
     `SELECT current.occurred_at AS current_in,
       (SELECT prev.occurred_at FROM case_events prev

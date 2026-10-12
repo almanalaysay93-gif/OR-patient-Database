@@ -1,10 +1,12 @@
 import type { Db, RawDb } from "../data/db";
 import { uuid, nowIso } from "../data/db";
+import { currentUserId, requirePermission } from "./session";
 
 export interface AuditEntry {
   audit_id: string;
   user_id: string | null;
   username?: string | null;
+  user_full_name?: string | null;
   patient_id: string | null;
   admission_id: string | null;
   case_id: string | null;
@@ -47,7 +49,7 @@ export async function logAudit(
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       auditId,
-      params.userId ?? null,
+      params.userId ?? currentUserId(),
       params.patientId ?? null,
       params.admissionId ?? null,
       params.caseId ?? null,
@@ -67,14 +69,19 @@ export async function logAudit(
 
 export async function getAuditHistory(
   db: Db,
-  filter?: { patientId?: string; caseId?: string; limit?: number }
+  filter?: { patientId?: string; caseId?: string; userId?: string; limit?: number }
 ): Promise<AuditEntry[]> {
+  requirePermission("audit.view");
   const conditions: string[] = [];
   const params: (string | number)[] = [];
 
   if (filter?.patientId) {
     conditions.push("a.patient_id = ?");
     params.push(filter.patientId);
+  }
+  if (filter?.userId) {
+    conditions.push("a.user_id = ?");
+    params.push(filter.userId);
   }
   if (filter?.caseId) {
     conditions.push("a.case_id = ?");

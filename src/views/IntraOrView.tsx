@@ -4,6 +4,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
+import { CaseActions } from "../components/clinical/CaseActions";
 import {
   getIntraOrRecord,
   saveIntraOrRecord,
@@ -111,6 +112,11 @@ export const IntraOrView: React.FC = () => {
               Intra-OR Documentation: {surgicalCase.patient_name}
             </h1>
             <span className="badge badge-primary">{surgicalCase.case_number}</span>
+            <CaseActions
+              caseId={surgicalCase.case_id} status={surgicalCase.case_status}
+              caseLabel={`${surgicalCase.case_number} - ${surgicalCase.patient_name}`}
+              onDone={async () => { if (db) setSurgicalCase(await getCaseById(db, surgicalCase.case_id)); }}
+            />
             <span className="badge badge-warning">{surgicalCase.case_status}</span>
           </div>
           <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>

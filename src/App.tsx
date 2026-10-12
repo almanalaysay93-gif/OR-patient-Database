@@ -1,8 +1,11 @@
 import React from "react";
-import { AppProvider, useApp } from "./context/AppContext";
+import { AppProvider, useApp, type NavView } from "./context/AppContext";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
-import { SetupWizard } from "./components/setup/SetupWizard";
+import { LoginScreen } from "./components/auth/LoginScreen";
+import { LockScreen } from "./components/auth/LockScreen";
+import { ChangePasswordScreen } from "./components/auth/ChangePasswordScreen";
+import { RecoveryKeyScreen } from "./components/auth/RecoveryKeyScreen";
 import { GlobalSearchModal } from "./components/common/GlobalSearchModal";
 import { AssistantPanel } from "./components/assistant/AssistantPanel";
 import { HyperFramesGuideModal } from "./components/video/HyperFramesGuideModal";
@@ -17,37 +20,73 @@ import { PostOrView } from "./views/PostOrView";
 import { AnalyticsView } from "./views/AnalyticsView";
 import { SettingsView } from "./views/SettingsView";
 
+/** Screens where a signed-in user may look but not save unless they hold one of these permissions. */
+const EDIT_PERMISSIONS: Partial<Record<NavView, string[]>> = {
+  patients: ["patients.create", "patients.edit_demographics", "cases.edit"],
+  preor: ["preor.edit"],
+  schedule: ["schedule.edit"],
+  intraor: ["intraor.edit"],
+  postor: ["postor.edit"],
+};
+
 const MainLayout: React.FC = () => {
-  const { currentView, setupComplete, toast } = useApp();
+  const { currentView, session, locked, can, loading, needsRecoveryKey, error, toast } = useApp();
+  const editPermissions = EDIT_PERMISSIONS[currentView];
+  const readOnly = !!editPermissions && !editPermissions.some(can);
 
   return (
     <div style={{ display: "flex", height: "100vh", width: "100vw", overflow: "hidden" }}>
-      {/* Sidebar */}
-      <Sidebar />
+      {!session ? (
+        needsRecoveryKey ? (
+          <RecoveryKeyScreen />
+        ) : loading || error ? (
+          <div role={error ? "alert" : "status"} style={{ margin: "auto", color: error ? "var(--danger)" : "var(--text-muted)", fontSize: "14px", maxWidth: "480px", textAlign: "center" }}>
+            {error ? `The database could not be opened: ${error}` : "Opening database..."}
+          </div>
+        ) : (
+          <LoginScreen />
+        )
+      ) : session.mustChangePassword ? (
+        // No screen is mounted until the temporary password is replaced: every service refuses to run.
+        locked ? <LockScreen /> : <ChangePasswordScreen />
+      ) : (
+        <>
+          {/* Hidden, not unmounted, while locked: unsaved form entries survive the lock. */}
+          <div inert={locked} style={{ display: locked ? "none" : "flex", flex: 1, minWidth: 0 }}>
+            <Sidebar />
 
-      {/* Main Content Area */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
-        <Header />
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
+              <Header />
 
-        <main style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
-          {currentView === "dashboard" && <DashboardView />}
-          {currentView === "patients" && <PatientsView />}
-          {currentView === "preor" && <PreOrView />}
-          {currentView === "schedule" && <ScheduleView />}
-          {currentView === "intraor" && <IntraOrView />}
-          {currentView === "postor" && <PostOrView />}
-          {currentView === "analytics" && <AnalyticsView />}
-          {currentView === "settings" && <SettingsView />}
-        </main>
-      </div>
+              <main style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
+                {readOnly && (
+                  <div role="status" className="badge badge-warning" style={{ margin: "16px 32px 0", padding: "8px 12px", fontSize: "13px" }}>
+                    View only: your role ({session.roleName}) cannot save changes on this screen.
+                  </div>
+                )}
+                {currentView === "dashboard" && <DashboardView />}
+                {currentView === "patients" && <PatientsView />}
+                {currentView === "preor" && <PreOrView />}
+                {currentView === "schedule" && <ScheduleView />}
+                {currentView === "intraor" && <IntraOrView />}
+                {currentView === "postor" && <PostOrView />}
+                {currentView === "analytics" && <AnalyticsView />}
+                {currentView === "settings" && <SettingsView />}
+              </main>
+            </div>
+          </div>
 
-      {/* Setup Wizard Modal on First Run */}
-      {!setupComplete && <SetupWizard />}
-
-      {/* Global Modals */}
-      <GlobalSearchModal />
-      <AssistantPanel />
-      <HyperFramesGuideModal />
+          {!locked && (
+            <>
+              {/* Both read patient records, so they follow the same permission as the patient screens. */}
+              {can("patients.view") && <GlobalSearchModal />}
+              {can("patients.view") && <AssistantPanel />}
+              <HyperFramesGuideModal />
+            </>
+          )}
+          {locked && <LockScreen />}
+        </>
+      )}
 
       {/* Toast Notification */}
       {toast && (

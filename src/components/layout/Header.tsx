@@ -8,6 +8,7 @@ import {
   User,
   Shield,
   LogOut,
+  Lock,
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 
@@ -22,6 +23,8 @@ export const Header: React.FC = () => {
     assistantOpen,
     setAssistantOpen,
     onLogout,
+    lock,
+    can,
   } = useApp();
 
   const cycleEffects = () => {
@@ -35,6 +38,7 @@ export const Header: React.FC = () => {
       {/* Global Search Button */}
       <button
         onClick={() => setSearchOpen(true)}
+        disabled={!can("patients.view")}
         className="glass-input"
         style={{
           width: "320px",
@@ -65,6 +69,7 @@ export const Header: React.FC = () => {
         {/* AI Assistant */}
         <button
           onClick={() => setAssistantOpen(!assistantOpen)}
+          disabled={!can("patients.view")}
           title="Ask the assistant (Ctrl+J)"
           className={`glass-btn ${assistantOpen ? "glass-btn-primary" : "glass-btn-secondary"}`}
           style={{ padding: "6px 12px", fontSize: "12px", gap: "6px" }}
@@ -109,8 +114,17 @@ export const Header: React.FC = () => {
               </span>
             </div>
             <button
+              onClick={lock}
+              title="Lock workstation"
+              aria-label="Lock workstation"
+              style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-muted)", marginLeft: "4px" }}
+            >
+              <Lock size={14} />
+            </button>
+            <button
               onClick={onLogout}
               title="Sign Out"
+              aria-label="Sign out"
               style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--text-muted)", marginLeft: "4px" }}
             >
               <LogOut size={14} />

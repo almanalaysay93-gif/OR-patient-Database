@@ -1,6 +1,7 @@
 import type { Db } from "../data/db";
 import { nowIso } from "../data/db";
 import { logAudit } from "./audit";
+import { requirePermission } from "./session";
 import { getCaseById } from "./patients";
 
 export type SafetyPhase = "SIGN_IN" | "TIME_OUT" | "SIGN_OUT";
@@ -21,6 +22,7 @@ export interface SafetyItem {
 }
 
 export async function getSafetyItems(db: Db, caseId: string): Promise<SafetyItem[]> {
+  requirePermission("patients.view");
   return db.select<SafetyItem>(
     `SELECT i.item_id, i.template_id, t.version AS template_version, i.phase, i.label, i.required,
             COALESCE(r.status, 'PENDING') AS status, r.occurred_at, r.recorded_at, r.recorded_by, r.notes
@@ -36,6 +38,7 @@ export async function saveSafetyResponse(
   db: Db,
   params: { caseId: string; itemId: string; status: SafetyStatus; notes?: string | null; userId?: string | null },
 ): Promise<void> {
+  params = { ...params, userId: requirePermission("intraor.edit") };
   const c = await getCaseById(db, params.caseId);
   if (!c) throw new Error("Surgical case not found.");
   const valid: SafetyStatus[] = ["PENDING", "COMPLETE", "FAILED", "NOT_APPLICABLE"];

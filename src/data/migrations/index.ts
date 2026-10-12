@@ -9,6 +9,10 @@ import { M006_PREOP_BASELINE } from "./006_preop_baseline";
 import { M007_SAFETY_PHASES } from "./007_safety_phases";
 import { M008_CASE_EVENTS } from "./008_case_events";
 import { M009_FOLLOWUP } from "./009_followup";
+import { M010_MASTER_ADMIN_LOGIN } from "./010_master_admin_login";
+import { M011_FORCE_ADMIN_PASSWORD_CHANGE } from "./011_force_admin_password_change";
+import { M012_ARCHIVE_AND_CASE_STAGE } from "./012_archive_and_case_stage";
+import { M013_SET_ADMIN_PASSWORD } from "./013_set_admin_password";
 
 export interface Migration {
   version: number;
@@ -27,6 +31,10 @@ export const MIGRATIONS: Migration[] = [
   { version: 7, name: "safety_phases", sql: M007_SAFETY_PHASES },
   { version: 8, name: "case_events", sql: M008_CASE_EVENTS },
   { version: 9, name: "followup", sql: M009_FOLLOWUP },
+  { version: 10, name: "master_admin_login", sql: M010_MASTER_ADMIN_LOGIN },
+  { version: 11, name: "force_admin_password_change", sql: M011_FORCE_ADMIN_PASSWORD_CHANGE },
+  { version: 12, name: "archive_and_case_stage", sql: M012_ARCHIVE_AND_CASE_STAGE },
+  { version: 13, name: "set_admin_password", sql: M013_SET_ADMIN_PASSWORD },
 ];
 
 export interface MigrationResult {

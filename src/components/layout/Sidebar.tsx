@@ -11,7 +11,7 @@ import {
   ShieldCheck,
   Film,
 } from "lucide-react";
-import { useApp, type NavView } from "../../context/AppContext";
+import { useApp, canOpenView, type NavView } from "../../context/AppContext";
 
 interface NavItem {
   id: NavView;
@@ -32,7 +32,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export const Sidebar: React.FC = () => {
-  const { currentView, setView, setVideoGuideOpen } = useApp();
+  const { currentView, session, setView, setVideoGuideOpen } = useApp();
 
   return (
     <aside className="glass-sidebar" style={{ width: "240px", display: "flex", flexDirection: "column", height: "100vh" }}>
@@ -63,13 +63,14 @@ export const Sidebar: React.FC = () => {
 
       {/* Navigation List */}
       <nav style={{ flex: 1, padding: "14px 10px", display: "flex", flexDirection: "column", gap: "4px" }}>
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((item) => canOpenView(session, item.id)).map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;
           return (
             <button
               key={item.id}
               onClick={() => setView(item.id)}
+              aria-current={isActive ? "page" : undefined}
               style={{
                 display: "flex",
                 alignItems: "center",

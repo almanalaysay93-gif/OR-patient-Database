@@ -1,6 +1,7 @@
 import type { Db } from "../data/db";
 import { uuid, nowIso, bool } from "../data/db";
 import { logAudit } from "./audit";
+import { requirePermission } from "./session";
 import { getCaseById } from "./patients";
 import { createFollowupIfDue } from "./followup";
 
@@ -56,6 +57,7 @@ export interface ComplicationRecord {
 }
 
 export async function getIntraOrRecord(db: Db, caseId: string): Promise<IntraOrRecord | null> {
+  requirePermission("patients.view");
   const rows = await db.select<any>(
     `SELECT i.*, a.name as anesthesia_name
      FROM intra_or_records i
@@ -84,6 +86,7 @@ export async function saveIntraOrRecord(
     userId?: string | null;
   }
 ): Promise<void> {
+  params = { ...params, userId: requirePermission("intraor.edit") };
   const now = nowIso();
   const c = await getCaseById(db, params.caseId);
   if (!c) throw new Error("Case not found.");
@@ -165,6 +168,7 @@ export async function saveIntraOrRecord(
 }
 
 export async function getPostOrRecord(db: Db, caseId: string): Promise<PostOrRecord | null> {
+  requirePermission("patients.view");
   const rows = await db.select<any>(
     `SELECT p.*, d.name as destination_name
      FROM post_or_records p
@@ -192,6 +196,7 @@ export async function savePostOrRecord(
     userId?: string | null;
   }
 ): Promise<void> {
+  params = { ...params, userId: requirePermission("postor.edit") };
   const now = nowIso();
   const c = await getCaseById(db, params.caseId);
   if (!c) throw new Error("Case not found.");
@@ -281,6 +286,7 @@ export async function addComplication(
     userId?: string | null;
   }
 ): Promise<string> {
+  params = { ...params, userId: requirePermission("postor.edit") };
   const compId = uuid();
   const now = nowIso();
   const c = await getCaseById(db, params.caseId);
@@ -326,6 +332,7 @@ export async function addComplication(
 }
 
 export async function getComplicationsByCase(db: Db, caseId: string): Promise<ComplicationRecord[]> {
+  requirePermission("patients.view");
   return db.select<ComplicationRecord>(
     `SELECT c.*, ct.name as complication_name, ct.category
      FROM complications c
@@ -341,6 +348,7 @@ export async function completeCase(
   caseId: string,
   userId?: string | null
 ): Promise<void> {
+  userId = requirePermission("postor.edit");
   const c = await getCaseById(db, caseId);
   if (!c) throw new Error("Case not found.");
 

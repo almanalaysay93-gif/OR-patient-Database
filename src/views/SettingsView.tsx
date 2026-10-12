@@ -1,19 +1,27 @@
 import React, { useEffect, useState } from "react";
-import {
-  Save,
-  Download,
-} from "lucide-react";
+import { Save, Plus, KeyRound } from "lucide-react";
 import { useApp } from "../context/AppContext";
-import { getOrRooms, getSpecialties, type OrRoom, type Specialty } from "../services/masterData";
+import {
+  getOrRooms, getSpecialties, addOrRoom, addSpecialty, saveFacilityProfile, type OrRoom, type Specialty,
+} from "../services/masterData";
+import { changeOwnPassword } from "../services/userAdmin";
+import { UsersPanel } from "../components/admin/UsersPanel";
+import { BackupPanel } from "../components/admin/BackupPanel";
+import { ExportPanel } from "../components/admin/ExportPanel";
+import { DemoDataPanel } from "../components/admin/DemoDataPanel";
+import { AuditPanel } from "../components/admin/AuditPanel";
 
 export const SettingsView: React.FC = () => {
-  const { db, theme, setTheme, visualEffects, setVisualEffects, notify } = useApp();
+  const { db, session, can, theme, setTheme, visualEffects, setVisualEffects, notify } = useApp();
+  const canManage = can("masterdata.manage");
   const [rooms, setRooms] = useState<OrRoom[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [facilityName, setFacilityName] = useState("Operating Suite");
   const [departmentName, setDepartmentName] = useState("Department of Surgery");
   const [schemaVersion, setSchemaVersion] = useState<number>(2);
-  const [backupDir, setBackupDir] = useState<string | null>(null);
+  const [newRoom, setNewRoom] = useState("");
+  const [newSpecialty, setNewSpecialty] = useState("");
+  const [passwords, setPasswords] = useState({ current: "", next: "", repeat: "" });
 
   useEffect(() => {
     async function load() {
@@ -31,7 +39,6 @@ export const SettingsView: React.FC = () => {
         if (facRow[0]?.value) setFacilityName(facRow[0].value);
         if (deptRow[0]?.value) setDepartmentName(deptRow[0].value);
         if (migRow[0]?.v) setSchemaVersion(migRow[0].v);
-        setBackupDir(db.backupDir);
       } catch (err) {
         console.error(err);
       }
@@ -43,29 +50,48 @@ export const SettingsView: React.FC = () => {
     e.preventDefault();
     if (!db) return;
     try {
-      await db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('facility_name', ?)", [facilityName]);
-      await db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('department_name', ?)", [departmentName]);
+      await saveFacilityProfile(db, { facilityName, departmentName });
       notify("Facility settings updated.", "success");
     } catch (err) {
       notify((err as Error).message, "error");
     }
   };
 
-  const handleBackupNow = async () => {
+  const handleAddRoom = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!db) return;
-    if (!db.backupDir) {
-      notify("Local file backup is available in the desktop Tauri installation.", "info");
+    try {
+      await addOrRoom(db, newRoom);
+      setNewRoom("");
+      setRooms(await getOrRooms(db, false));
+    } catch (err) {
+      notify((err as Error).message, "error");
+    }
+  };
+
+  const handleAddSpecialty = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db) return;
+    try {
+      await addSpecialty(db, newSpecialty);
+      setNewSpecialty("");
+      setSpecialties(await getSpecialties(db, false));
+    } catch (err) {
+      notify((err as Error).message, "error");
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db) return;
+    if (passwords.next !== passwords.repeat) {
+      notify("The two new passwords do not match.", "error");
       return;
     }
     try {
-      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const path = `${db.backupDir}\\OR-ManualBackup-${stamp}.db`;
-      const ok = await db.backupTo(path);
-      if (ok) {
-        notify(`Backup saved to ${path}`, "success");
-      } else {
-        notify("Database backup operation not supported in current environment.", "warning");
-      }
+      await changeOwnPassword(db, passwords.current, passwords.next);
+      setPasswords({ current: "", next: "", repeat: "" });
+      notify("Password changed.", "success");
     } catch (err) {
       notify((err as Error).message, "error");
     }
@@ -78,11 +104,33 @@ export const SettingsView: React.FC = () => {
           Station Settings & Master Data
         </h1>
         <p style={{ fontSize: "14px", color: "var(--text-muted)", marginTop: "4px" }}>
-          Configure facility profile, visual presentation parameters, and SQLite database backup policies.
+          Your account, facility profile, staff accounts, backups, exports and the audit log.
         </p>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
+        {/* My Account */}
+        <form onSubmit={handleChangePassword} className="glass-card" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "12px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, borderBottom: "1px solid var(--border-glass)", paddingBottom: "10px" }}>
+            My Account
+          </h2>
+          <div style={{ fontSize: "13px" }}>
+            Signed in as <strong>{session?.fullName}</strong> ({session?.username}) &bull; {session?.roleName}
+          </div>
+          {([["current", "Current password", "current-password"], ["next", "New password (8+ characters)", "new-password"], ["repeat", "Repeat new password", "new-password"]] as const).map(([key, text, auto]) => (
+            <div key={key}>
+              <label htmlFor={`pw-${key}`} style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>{text}</label>
+              <input id={`pw-${key}`} className="glass-input" type="password" autoComplete={auto} value={passwords[key]} onChange={(e) => setPasswords({ ...passwords, [key]: e.target.value })} />
+            </div>
+          ))}
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button type="submit" className="glass-btn glass-btn-primary" style={{ gap: "6px" }} disabled={!passwords.current || !passwords.next}>
+              <KeyRound size={14} />
+              <span>Change Password</span>
+            </button>
+          </div>
+        </form>
+
         {/* Facility Profile */}
         <form onSubmit={handleSaveFacility} className="glass-card" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: 700, borderBottom: "1px solid var(--border-glass)", paddingBottom: "10px" }}>
@@ -92,20 +140,25 @@ export const SettingsView: React.FC = () => {
             <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
               Facility Name
             </label>
-            <input className="glass-input" value={facilityName} onChange={(e) => setFacilityName(e.target.value)} />
+            <input className="glass-input" disabled={!canManage} value={facilityName} onChange={(e) => setFacilityName(e.target.value)} />
           </div>
           <div>
             <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
               Department / Unit
             </label>
-            <input className="glass-input" value={departmentName} onChange={(e) => setDepartmentName(e.target.value)} />
+            <input className="glass-input" disabled={!canManage} value={departmentName} onChange={(e) => setDepartmentName(e.target.value)} />
           </div>
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button type="submit" className="glass-btn glass-btn-primary" style={{ gap: "6px" }}>
-              <Save size={14} />
-              <span>Save Facility</span>
-            </button>
+          <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+            Database: SQLite on this workstation, schema v{schemaVersion}
           </div>
+          {canManage && (
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button type="submit" className="glass-btn glass-btn-primary" style={{ gap: "6px" }}>
+                <Save size={14} />
+                <span>Save Facility</span>
+              </button>
+            </div>
+          )}
         </form>
 
         {/* Appearance & Performance Modes */}
@@ -157,25 +210,6 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Database & Backup */}
-        <div className="glass-card" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
-          <h2 style={{ fontSize: "16px", fontWeight: 700, borderBottom: "1px solid var(--border-glass)", paddingBottom: "10px" }}>
-            Database Integrity & Backups
-          </h2>
-          <div style={{ fontSize: "13px", lineHeight: "1.6", color: "var(--text-main)" }}>
-            <div><strong>Engine:</strong> SQLite (Local Embedded)</div>
-            <div><strong>Schema Version:</strong> v{schemaVersion} (All migrations verified)</div>
-            <div><strong>WAL Mode:</strong> Enabled with Full Sync</div>
-            <div><strong>Backup Location:</strong> {backupDir || "Local User Application Data"}</div>
-          </div>
-          <div style={{ display: "flex", justifyContent: "flex-start", marginTop: "6px" }}>
-            <button onClick={handleBackupNow} className="glass-btn glass-btn-primary" style={{ gap: "8px" }}>
-              <Download size={14} />
-              <span>Create Immediate Backup</span>
-            </button>
-          </div>
-        </div>
-
         {/* Master Data Overview */}
         <div className="glass-card" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "14px" }}>
           <h2 style={{ fontSize: "16px", fontWeight: 700, borderBottom: "1px solid var(--border-glass)", paddingBottom: "10px" }}>
@@ -188,6 +222,12 @@ export const SettingsView: React.FC = () => {
                 <span key={r.or_room_id} className="badge badge-neutral">{r.name}</span>
               ))}
             </div>
+            {canManage && (
+              <form onSubmit={handleAddRoom} style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                <input className="glass-input" aria-label="New operating room name" placeholder="New room, e.g. OR 3" value={newRoom} onChange={(e) => setNewRoom(e.target.value)} />
+                <button type="submit" className="glass-btn glass-btn-secondary" disabled={!newRoom.trim()} style={{ gap: "6px" }}><Plus size={14} /><span>Add</span></button>
+              </form>
+            )}
           </div>
           <div style={{ fontSize: "13px", marginTop: "6px" }}>
             <strong>Specialties ({specialties.length}):</strong>
@@ -196,8 +236,20 @@ export const SettingsView: React.FC = () => {
                 <span key={s.specialty_id} className="badge badge-primary">{s.name}</span>
               ))}
             </div>
+            {canManage && (
+              <form onSubmit={handleAddSpecialty} style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                <input className="glass-input" aria-label="New specialty name" placeholder="New specialty" value={newSpecialty} onChange={(e) => setNewSpecialty(e.target.value)} />
+                <button type="submit" className="glass-btn glass-btn-secondary" disabled={!newSpecialty.trim()} style={{ gap: "6px" }}><Plus size={14} /><span>Add</span></button>
+              </form>
+            )}
           </div>
         </div>
+
+        {(can("export.deidentified") || can("export.identifiable")) && <ExportPanel />}
+        {can("users.manage") && <UsersPanel />}
+        {(can("db.backup") || can("db.restore")) && <BackupPanel />}
+        {can("audit.view") && <AuditPanel />}
+        {can("users.manage") && <DemoDataPanel />}
       </div>
     </div>
   );

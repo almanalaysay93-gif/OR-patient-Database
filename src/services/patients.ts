@@ -1,6 +1,7 @@
 import type { Db } from "../data/db";
 import { uuid, nowIso } from "../data/db";
 import { logAudit } from "./audit";
+import { requirePermission } from "./session";
 
 export interface Patient {
   patient_id: string;
@@ -66,6 +67,8 @@ export interface SurgicalCase {
   preoperative_diagnosis_summary: string | null;
   postoperative_diagnosis_summary: string | null;
   case_status: CaseStatus;
+  /** Reason given the last time the case was cancelled, postponed or moved by hand. */
+  status_reason?: string | null;
   status_label?: string;
   created_at: string;
   updated_at: string;
@@ -112,6 +115,7 @@ export async function createPatient(
     userId?: string | null;
   }
 ): Promise<Patient> {
+  params = { ...params, userId: requirePermission("patients.create") };
   const patientId = uuid();
   const now = nowIso();
   const cleanHrn = params.hrn?.trim() || null;
@@ -173,7 +177,71 @@ export async function createPatient(
   return getPatientById(db, patientId) as Promise<Patient>;
 }
 
+export interface PatientDetails {
+  hrn?: string | null;
+  firstName: string;
+  middleName?: string | null;
+  lastName: string;
+  suffix?: string | null;
+  dateOfBirth?: string | null;
+  sex?: Patient["sex"];
+  address?: string | null;
+  contactNumber?: string | null;
+  bloodType?: string | null;
+}
+
+/** Corrects a patient's details. Each changed field gets its own audit entry with the old and new value. */
+export async function updatePatient(db: Db, patientId: string, details: PatientDetails): Promise<Patient> {
+  const userId = requirePermission("patients.edit_demographics");
+  const rows = await db.select<Record<string, string | number | null>>(
+    "SELECT * FROM patients WHERE patient_id = ?", [patientId]);
+  const old = rows[0];
+  if (!old) throw new Error("Patient not found.");
+  if (!old.is_active) throw new Error("Restore this archived patient before editing.");
+
+  const text = (v: string | null | undefined) => v?.trim() || null;
+  const next: Record<string, string | null> = {
+    hrn: text(details.hrn),
+    first_name: text(details.firstName),
+    middle_name: text(details.middleName),
+    last_name: text(details.lastName),
+    suffix: text(details.suffix),
+    date_of_birth: details.dateOfBirth || null,
+    sex: details.sex || null,
+    address: text(details.address),
+    contact_number: text(details.contactNumber),
+    blood_type: text(details.bloodType),
+  };
+  if (!next.first_name || !next.last_name) throw new Error("First name and last name are required.");
+  if (next.date_of_birth && next.date_of_birth > nowIso().slice(0, 10)) {
+    throw new Error("Date of birth cannot be in the future.");
+  }
+  if (next.hrn && next.hrn !== old.hrn) {
+    const clash = await db.select<{ patient_id: string }>(
+      "SELECT patient_id FROM patients WHERE hrn = ? AND is_active = 1 AND patient_id != ?", [next.hrn, patientId]);
+    if (clash.length) throw new Error(`A patient with HRN "${next.hrn}" already exists.`);
+  }
+
+  const changed = Object.keys(next).filter((field) => (old[field] ?? null) !== next[field]);
+  if (changed.length) {
+    const now = nowIso();
+    await db.transaction(async (tx) => {
+      await tx.execute(
+        `UPDATE patients SET ${changed.map((f) => `${f} = ?`).join(", ")}, updated_by = ?, updated_at = ? WHERE patient_id = ?`,
+        [...changed.map((f) => next[f]), userId, now, patientId]);
+      for (const field of changed) {
+        await logAudit(tx, {
+          userId, patientId, action: "UPDATE_PATIENT", entityType: "PATIENT", recordId: patientId,
+          fieldName: field, oldValue: old[field] == null ? null : String(old[field]), newValue: next[field],
+        });
+      }
+    });
+  }
+  return getPatientById(db, patientId) as Promise<Patient>;
+}
+
 export async function getPatientById(db: Db, patientId: string): Promise<Patient | null> {
+  requirePermission("patients.view");
   const rows = await db.select<any>(
     "SELECT * FROM patients WHERE patient_id = ?",
     [patientId]
@@ -197,6 +265,7 @@ export async function listPatients(
   db: Db,
   query?: { search?: string; limit?: number; offset?: number }
 ): Promise<{ patients: Patient[]; total: number }> {
+  requirePermission("patients.view");
   let where = "WHERE is_active = 1";
   const params: any[] = [];
 
@@ -249,6 +318,7 @@ export async function createAdmission(
     userId?: string | null;
   }
 ): Promise<Admission> {
+  params = { ...params, userId: requirePermission("cases.edit") };
   const admissionId = uuid();
   const now = nowIso();
   const admissionNo =
@@ -295,6 +365,7 @@ export async function createAdmission(
 }
 
 export async function getAdmissionsByPatient(db: Db, patientId: string): Promise<Admission[]> {
+  requirePermission("patients.view");
   return db.select<Admission>(
     "SELECT * FROM admissions WHERE patient_id = ? ORDER BY admission_date DESC",
     [patientId]
@@ -316,6 +387,7 @@ export async function createSurgicalCase(
     userId?: string | null;
   }
 ): Promise<SurgicalCase> {
+  params = { ...params, userId: requirePermission("cases.edit") };
   const caseId = uuid();
   const now = nowIso();
   const caseNo =
@@ -387,6 +459,7 @@ export async function createSurgicalCase(
 }
 
 export async function getCaseById(db: Db, caseId: string): Promise<SurgicalCase | null> {
+  requirePermission("patients.view");
   const rows = await db.select<any>(
     `SELECT c.*, s.name as specialty_name, sl.label as status_label,
             p.first_name, p.last_name, p.middle_name, p.suffix, p.hrn as patient_hrn,
@@ -414,6 +487,7 @@ export async function getCaseById(db: Db, caseId: string): Promise<SurgicalCase 
 }
 
 export async function getCasesByPatient(db: Db, patientId: string): Promise<SurgicalCase[]> {
+  requirePermission("patients.view");
   const rows = await db.select<any>(
     `SELECT c.*, s.name as specialty_name, sl.label as status_label
      FROM surgical_cases c
@@ -432,6 +506,7 @@ export async function updateCaseStatus(
   newStatus: CaseStatus,
   userId?: string | null
 ): Promise<void> {
+  userId = requirePermission("cases.change_stage");
   const existing = await getCaseById(db, caseId);
   if (!existing) throw new Error("Surgical case not found.");
 
@@ -463,6 +538,7 @@ export async function searchGlobal(
   patients: Patient[];
   cases: SurgicalCase[];
 }> {
+  requirePermission("patients.view");
   const q = `%${term.trim()}%`;
   const patientRows = await db.select<any>(
     `SELECT * FROM patients

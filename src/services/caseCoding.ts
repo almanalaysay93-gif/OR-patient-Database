@@ -1,6 +1,7 @@
 import type { Db } from "../data/db";
 import { nowIso, uuid } from "../data/db";
 import { logAudit } from "./audit";
+import { requirePermission } from "./session";
 import { getCaseById } from "./patients";
 
 export type DiagnosisType = "PRE_OPERATIVE" | "POST_OPERATIVE" | "COMORBIDITY" | "OTHER";
@@ -11,6 +12,7 @@ export interface CaseCoding {
 }
 
 export async function getCaseCoding(db: Db, caseId: string): Promise<CaseCoding> {
+  requirePermission("patients.view");
   const [procedures, diagnoses] = await Promise.all([
     db.select<CaseCoding["procedures"][number]>(
       `SELECT cp.case_procedure_id, cp.procedure_id, p.procedure_name, cp.is_primary
@@ -34,6 +36,7 @@ export async function saveCaseCoding(
     userId?: string | null;
   },
 ): Promise<void> {
+  params = { ...params, userId: requirePermission("cases.edit") };
   const c = await getCaseById(db, params.caseId);
   if (!c) throw new Error("Surgical case not found.");
   const procedureIds = [params.primaryProcedureId, ...params.additionalProcedureIds].filter((v): v is string => !!v);
@@ -97,6 +100,7 @@ export async function saveCaseCoding(
 }
 
 export async function getUncodedCases(db: Db): Promise<{ case_id: string; case_number: string; planned_procedure_summary: string | null }[]> {
+  requirePermission("patients.view");
   return db.select(
     `SELECT c.case_id, c.case_number, c.planned_procedure_summary FROM surgical_cases c
      WHERE NOT EXISTS (SELECT 1 FROM case_procedures cp WHERE cp.case_id = c.case_id AND cp.is_primary = 1)

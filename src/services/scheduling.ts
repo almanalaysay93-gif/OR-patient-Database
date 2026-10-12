@@ -1,6 +1,7 @@
 import type { Db } from "../data/db";
 import { uuid, nowIso } from "../data/db";
 import { logAudit } from "./audit";
+import { requirePermission } from "./session";
 import { getCaseById } from "./patients";
 
 export interface ScheduleItem {
@@ -87,6 +88,7 @@ export async function checkSchedulingConflicts(
     excludeScheduleId?: string;
   }
 ): Promise<SchedulingConflict[]> {
+  requirePermission("patients.view");
   const conflicts: SchedulingConflict[] = [];
 
   // 1. Check OR Room overlap on the same date
@@ -210,6 +212,7 @@ export async function scheduleCase(
     allowConflictOverride?: boolean;
   }
 ): Promise<{ scheduleId: string; conflicts: SchedulingConflict[] }> {
+  params = { ...params, userId: requirePermission("schedule.edit") };
   const conflicts = await checkSchedulingConflicts(db, {
     caseId: params.caseId,
     roomId: params.roomId,
@@ -279,6 +282,7 @@ export async function scheduleCase(
 }
 
 export async function getScheduleByDate(db: Db, date: string): Promise<ScheduleItem[]> {
+  requirePermission("patients.view");
   const rows = await db.select<any>(
     `SELECT s.*, r.name as room_name,
             c.case_number, c.case_status, c.planned_procedure_summary,
@@ -317,6 +321,7 @@ export async function updateActualTimes(
     userId?: string | null;
   }
 ): Promise<void> {
+  params = { ...params, userId: requirePermission("schedule.edit", "intraor.edit") };
   const now = nowIso();
   const scheduleRows = await db.select<any>(
     "SELECT * FROM or_schedule WHERE schedule_id = ?",

@@ -1,6 +1,7 @@
 import type { Db } from "../data/db";
 import { nowIso } from "../data/db";
 import { logAudit } from "./audit";
+import { requirePermission } from "./session";
 import { getCaseById } from "./patients";
 
 export type ChecklistStatus = "PENDING" | "COMPLETE" | "NOT_APPLICABLE" | "FAILED";
@@ -65,6 +66,7 @@ export async function getPreOrChecklist(db: Db, caseId: string): Promise<{
   items: ChecklistItemValue[];
   readiness: ReadinessCalculation;
 }> {
+  requirePermission("patients.view");
   const rows = await db.select<any>(
     `SELECT v.*, d.name as item_name, d.description, d.required_by_default
      FROM pre_or_checklist_values v
@@ -89,6 +91,7 @@ export async function updateChecklistItem(
     userId?: string | null;
   }
 ): Promise<ReadinessCalculation> {
+  params = { ...params, userId: requirePermission("preor.edit") };
   const now = nowIso();
   const c = await getCaseById(db, params.caseId);
   if (!c) throw new Error("Surgical case not found.");
@@ -156,6 +159,7 @@ export async function updateChecklistItem(
 }
 
 export async function getPreOrBoardCases(db: Db): Promise<any[]> {
+  requirePermission("patients.view");
   const rows = await db.select<any>(
     `SELECT c.case_id, c.case_number, c.case_type, c.case_status,
             c.planned_procedure_summary, s.name as specialty_name,
