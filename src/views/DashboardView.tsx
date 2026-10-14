@@ -14,7 +14,7 @@ import { getScheduleByDate, type ScheduleItem } from "../services/scheduling";
 import { getOrRooms, type OrRoom } from "../services/masterData";
 
 export const DashboardView: React.FC = () => {
-  const { db, setView, setSelectedPatientId, setSelectedCaseId } = useApp();
+  const { db, setView, setSelectedPatientId, setSelectedCaseId, setOpenRegisterModal } = useApp();
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [rooms, setRooms] = useState<OrRoom[]>([]);
@@ -107,7 +107,10 @@ export const DashboardView: React.FC = () => {
         </div>
         <div style={{ display: "flex", gap: "10px" }}>
           <button
-            onClick={() => setView("patients")}
+            onClick={() => {
+              setView("patients");
+              setOpenRegisterModal(true);
+            }}
             className="glass-btn glass-btn-primary"
             style={{ gap: "8px" }}
           >

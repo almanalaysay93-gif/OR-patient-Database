@@ -2,6 +2,9 @@ import React, { useEffect, useState } from "react";
 import {
   Save,
   ArrowRight,
+  Plus,
+  Trash2,
+  Package,
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { CaseActions } from "../components/clinical/CaseActions";
@@ -11,6 +14,12 @@ import {
 } from "../services/intraPostOr";
 import { getCaseById, type SurgicalCase } from "../services/patients";
 import { getAnesthesiaTypes, type NamedEntity } from "../services/masterData";
+import {
+  listCaseImplants,
+  addCaseImplant,
+  deleteCaseImplant,
+  type CaseImplant,
+} from "../services/implants";
 import { CaseEventsPanel } from "../components/clinical/CaseEventsPanel";
 import { SafetyPhasesPanel } from "../components/clinical/SafetyPhasesPanel";
 
@@ -30,26 +39,64 @@ export const IntraOrView: React.FC = () => {
   const [findings, setFindings] = useState("");
   const [notes, setNotes] = useState("");
 
+  // Implants tracking
+  const [implants, setImplants] = useState<CaseImplant[]>([]);
+  const [implantModalOpen, setImplantModalOpen] = useState(false);
+  const [implantDeviceName, setImplantDeviceName] = useState("");
+  const [implantManufacturer, setImplantManufacturer] = useState("");
+  const [implantModel, setImplantModel] = useState("");
+  const [implantLot, setImplantLot] = useState("");
+  const [implantSerial, setImplantSerial] = useState("");
+  const [implantUdi, setImplantUdi] = useState("");
+  const [implantExpiry, setImplantExpiry] = useState("");
+  const [implantSite, setImplantSite] = useState("");
+  const [implantNotes, setImplantNotes] = useState("");
+
+  const reloadImplants = async (cid: string) => {
+    if (!db) return;
+    try {
+      const list = await listCaseImplants(db, cid);
+      setImplants(list);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     async function load() {
       if (!db || !selectedCaseId) return;
       try {
-        const [c, intra, anes] = await Promise.all([
+        const [c, intra, anes, implantList] = await Promise.all([
           getCaseById(db, selectedCaseId),
           getIntraOrRecord(db, selectedCaseId),
           getAnesthesiaTypes(db),
+          listCaseImplants(db, selectedCaseId),
         ]);
         setSurgicalCase(c);
         setAnesthesiaTypes(anes);
+        setImplants(implantList);
 
         // Always reset, so a case with no record yet never shows the previous case's values.
         setAnesthesiaTypeId(intra?.anesthesia_type_id || "");
-        setAsaClass(intra?.asa_classification || "");
+
+        // Synchronize ASA from pre-op baseline if not yet recorded in intra-op
+        let resolvedAsa = intra?.asa_classification || "";
+        if (!resolvedAsa) {
+          const preopRows = await db.select<{ asa_classification: string | null }>(
+            "SELECT asa_classification FROM case_preop_baseline WHERE case_id = ?",
+            [selectedCaseId]
+          );
+          if (preopRows[0]?.asa_classification) {
+            resolvedAsa = preopRows[0].asa_classification;
+          }
+        }
+        setAsaClass(resolvedAsa);
+
         setBloodLoss(intra?.estimated_blood_loss_ml?.toString() || "");
         setBloodTransfusion(intra?.blood_transfusion === 1);
         setUnitsTransfused(intra?.units_transfused || 0);
         setSpecimenCollected(intra?.specimen_collected === 1);
-        setImplantUsed(intra?.implant_used === 1);
+        setImplantUsed(intra?.implant_used === 1 || implantList.length > 0);
         setFindings(intra?.operative_findings || "");
         setNotes(intra?.operative_notes || "");
       } catch (err) {
@@ -58,6 +105,52 @@ export const IntraOrView: React.FC = () => {
     }
     load();
   }, [db, selectedCaseId]);
+
+  const handleAddImplant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!db || !selectedCaseId || !implantDeviceName.trim()) return;
+    try {
+      await addCaseImplant(db, {
+        caseId: selectedCaseId,
+        deviceName: implantDeviceName.trim(),
+        manufacturer: implantManufacturer.trim() || null,
+        modelNumber: implantModel.trim() || null,
+        lotNumber: implantLot.trim() || null,
+        serialNumber: implantSerial.trim() || null,
+        udiBarcode: implantUdi.trim() || null,
+        expiryDate: implantExpiry || null,
+        anatomicalSite: implantSite.trim() || null,
+        notes: implantNotes.trim() || null,
+        userId: session?.userId,
+      });
+      notify("Surgical implant registered.", "success");
+      setImplantModalOpen(false);
+      setImplantDeviceName("");
+      setImplantManufacturer("");
+      setImplantModel("");
+      setImplantLot("");
+      setImplantSerial("");
+      setImplantUdi("");
+      setImplantExpiry("");
+      setImplantSite("");
+      setImplantNotes("");
+      setImplantUsed(true);
+      await reloadImplants(selectedCaseId);
+    } catch (err) {
+      notify((err as Error).message, "error");
+    }
+  };
+
+  const handleDeleteImplant = async (implantId: string) => {
+    if (!db || !selectedCaseId) return;
+    try {
+      await deleteCaseImplant(db, implantId);
+      notify("Implant record removed.", "info");
+      await reloadImplants(selectedCaseId);
+    } catch (err) {
+      notify((err as Error).message, "error");
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -238,6 +331,74 @@ export const IntraOrView: React.FC = () => {
           </label>
         </div>
 
+        {/* Implant / Prosthesis Details Section */}
+        {implantUsed && (
+          <div style={{ border: "1px solid var(--border-subtle)", borderRadius: "12px", padding: "16px", background: "rgba(99, 102, 241, 0.04)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Package size={18} color="var(--primary)" />
+                <span style={{ fontSize: "14px", fontWeight: 700, color: "var(--text-main)" }}>
+                  Documented Surgical Implants ({implants.length})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setImplantModalOpen(true)}
+                className="glass-btn glass-btn-primary"
+                style={{ fontSize: "12px", padding: "6px 12px", gap: "6px" }}
+              >
+                <Plus size={14} />
+                <span>Add Implant / Device</span>
+              </button>
+            </div>
+
+            {implants.length === 0 ? (
+              <div style={{ fontSize: "13px", color: "var(--text-muted)", fontStyle: "italic", padding: "10px 0" }}>
+                No implants recorded yet. Click "Add Implant / Device" to log manufacturer, lot/serial, UDI, or anatomical site.
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border-glass)", color: "var(--text-muted)", textAlign: "left" }}>
+                      <th style={{ padding: "8px" }}>Device Name</th>
+                      <th style={{ padding: "8px" }}>Manufacturer</th>
+                      <th style={{ padding: "8px" }}>Model / Lot / Serial</th>
+                      <th style={{ padding: "8px" }}>Site</th>
+                      <th style={{ padding: "8px" }}>UDI Barcode</th>
+                      <th style={{ padding: "8px" }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {implants.map((imp) => (
+                      <tr key={imp.implant_id} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
+                        <td style={{ padding: "8px", fontWeight: 600 }}>{imp.device_name}</td>
+                        <td style={{ padding: "8px" }}>{imp.manufacturer || "-"}</td>
+                        <td style={{ padding: "8px" }}>
+                          {[imp.model_number, imp.lot_number, imp.serial_number].filter(Boolean).join(" / ") || "-"}
+                        </td>
+                        <td style={{ padding: "8px" }}>{imp.anatomical_site || "-"}</td>
+                        <td style={{ padding: "8px", fontFamily: "var(--font-mono)", fontSize: "11px" }}>{imp.udi_barcode || "-"}</td>
+                        <td style={{ padding: "8px" }}>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteImplant(imp.implant_id)}
+                            className="glass-btn glass-btn-danger"
+                            style={{ padding: "4px 8px", fontSize: "11px" }}
+                            aria-label={`Remove implant ${imp.device_name}`}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Findings and Notes */}
         <div>
           <label style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>
@@ -275,6 +436,117 @@ export const IntraOrView: React.FC = () => {
       </form>
       <CaseEventsPanel caseId={selectedCaseId} />
       <SafetyPhasesPanel caseId={selectedCaseId} />
+
+      {/* Modal: Add Implant */}
+      {implantModalOpen && (
+        <div role="dialog" aria-modal="true" aria-label="Add Surgical Implant" style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+          <div className="glass-card" style={{ width: "100%", maxWidth: "560px", maxHeight: "90vh", overflowY: "auto", padding: "28px" }}>
+            <h2 style={{ fontSize: "18px", fontWeight: 800, marginBottom: "4px" }}>Add Surgical Implant / Prosthesis</h2>
+            <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "16px" }}>
+              Track medical device tracking identifiers, lot numbers, and UDI for patient safety.
+            </p>
+            <form onSubmit={handleAddImplant} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: 600 }}>Device / Implant Name *</label>
+                  <input
+                    className="glass-input"
+                    required
+                    placeholder="e.g. Titanium Mesh Plate 2.0"
+                    value={implantDeviceName}
+                    onChange={(e) => setImplantDeviceName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: 600 }}>Manufacturer</label>
+                  <input
+                    className="glass-input"
+                    placeholder="e.g. Stryker, DePuy Synthes"
+                    value={implantManufacturer}
+                    onChange={(e) => setImplantManufacturer(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: 600 }}>Model / Ref #</label>
+                  <input
+                    className="glass-input"
+                    placeholder="e.g. 04.111.520"
+                    value={implantModel}
+                    onChange={(e) => setImplantModel(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: 600 }}>Lot Number</label>
+                  <input
+                    className="glass-input"
+                    placeholder="e.g. L982341"
+                    value={implantLot}
+                    onChange={(e) => setImplantLot(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: 600 }}>Serial Number</label>
+                  <input
+                    className="glass-input"
+                    placeholder="e.g. SN-88310"
+                    value={implantSerial}
+                    onChange={(e) => setImplantSerial(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: 600 }}>UDI Barcode / Data</label>
+                  <input
+                    className="glass-input"
+                    placeholder="(01)0088... / barcode scan"
+                    value={implantUdi}
+                    onChange={(e) => setImplantUdi(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: 600 }}>Expiration Date</label>
+                  <input
+                    type="date"
+                    className="glass-input"
+                    value={implantExpiry}
+                    onChange={(e) => setImplantExpiry(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", fontWeight: 600 }}>Anatomical Site / Placement</label>
+                <input
+                  className="glass-input"
+                  placeholder="e.g. Distal right radius, L4-L5 intervertebral space"
+                  value={implantSite}
+                  onChange={(e) => setImplantSite(e.target.value)}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", fontWeight: 600 }}>Notes / Dimensions</label>
+                <textarea
+                  rows={2}
+                  className="glass-input"
+                  placeholder="Size, screws used, sterile packaging verification..."
+                  value={implantNotes}
+                  onChange={(e) => setImplantNotes(e.target.value)}
+                />
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "10px" }}>
+                <button type="button" onClick={() => setImplantModalOpen(false)} className="glass-btn glass-btn-secondary">
+                  Cancel
+                </button>
+                <button type="submit" className="glass-btn glass-btn-primary">
+                  Save Implant Record
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

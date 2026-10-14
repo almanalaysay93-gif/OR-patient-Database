@@ -22,6 +22,9 @@ export const EditPatientDialog: React.FC<{
     bloodType: patient.blood_type ?? "",
     contactNumber: patient.contact_number ?? "",
     address: patient.address ?? "",
+    emergencyContactName: patient.emergency_contact_name ?? "",
+    emergencyContactPhone: patient.emergency_contact_phone ?? "",
+    emergencyContactRelationship: patient.emergency_contact_relationship ?? "",
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -48,7 +51,7 @@ export const EditPatientDialog: React.FC<{
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Edit patient details" style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-      <div className="glass-card" style={{ width: "100%", maxWidth: "560px", padding: "28px" }}>
+      <div className="glass-card" style={{ width: "100%", maxWidth: "580px", maxHeight: "90vh", overflowY: "auto", padding: "28px" }}>
         <h2 style={{ fontSize: "18px", fontWeight: 800, marginBottom: "4px" }}>Edit patient details</h2>
         <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "16px" }}>
           Every change is recorded in the audit history with your name.
@@ -95,7 +98,18 @@ export const EditPatientDialog: React.FC<{
             </div>
             <div>
               <label style={label} htmlFor="edit-blood">Blood Type</label>
-              <input id="edit-blood" className="glass-input" {...field("bloodType")} />
+              <select id="edit-blood" className="glass-input" {...field("bloodType")}>
+                <option value="">Not recorded</option>
+                <option value="A+">A+</option>
+                <option value="A-">A-</option>
+                <option value="B+">B+</option>
+                <option value="B-">B-</option>
+                <option value="AB+">AB+</option>
+                <option value="AB-">AB-</option>
+                <option value="O+">O+</option>
+                <option value="O-">O-</option>
+                <option value="UNKNOWN">Unknown</option>
+              </select>
             </div>
           </div>
           <div style={row("1fr 2fr")}>
@@ -106,6 +120,23 @@ export const EditPatientDialog: React.FC<{
             <div>
               <label style={label} htmlFor="edit-address">Address</label>
               <input id="edit-address" className="glass-input" {...field("address")} />
+            </div>
+          </div>
+          <div style={{ borderTop: "1px solid var(--border-color, rgba(255,255,255,0.08))", paddingTop: "12px" }}>
+            <p style={{ fontSize: "12px", fontWeight: 700, color: "var(--accent)", marginBottom: "8px" }}>Emergency Contact</p>
+            <div style={row("1.2fr 1fr 1fr")}>
+              <div>
+                <label style={label} htmlFor="edit-emer-name">Name</label>
+                <input id="edit-emer-name" className="glass-input" placeholder="Emergency contact name" {...field("emergencyContactName")} />
+              </div>
+              <div>
+                <label style={label} htmlFor="edit-emer-phone">Phone</label>
+                <input id="edit-emer-phone" className="glass-input" placeholder="Phone number" {...field("emergencyContactPhone")} />
+              </div>
+              <div>
+                <label style={label} htmlFor="edit-emer-rel">Relationship</label>
+                <input id="edit-emer-rel" className="glass-input" placeholder="Spouse, Parent, etc." {...field("emergencyContactRelationship")} />
+              </div>
             </div>
           </div>
           {error && <div role="alert" style={{ fontSize: "13px", color: "var(--danger)", fontWeight: 600 }}>{error}</div>}

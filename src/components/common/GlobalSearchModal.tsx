@@ -54,10 +54,18 @@ export const GlobalSearchModal: React.FC = () => {
     setSearchOpen(false);
   };
 
-  const onSelectCase = (caseId: string, patientId: string) => {
-    setSelectedPatientId(patientId);
-    setSelectedCaseId(caseId);
-    setView("intraor");
+  const onSelectCase = (c: SurgicalCase) => {
+    setSelectedPatientId(c.patient_id);
+    setSelectedCaseId(c.case_id);
+    if (c.case_status === "IN_OR") {
+      setView("intraor");
+    } else if (c.case_status === "SCHEDULED") {
+      setView("schedule");
+    } else if (c.case_status === "PACU" || c.case_status === "POST_OR" || c.case_status === "COMPLETED") {
+      setView("postor");
+    } else {
+      setView("preor");
+    }
     setSearchOpen(false);
   };
 
@@ -179,7 +187,7 @@ export const GlobalSearchModal: React.FC = () => {
               {cases.map((c) => (
                 <div
                   key={c.case_id}
-                  onClick={() => onSelectCase(c.case_id, c.patient_id)}
+                  onClick={() => onSelectCase(c)}
                   style={{
                     display: "flex",
                     alignItems: "center",

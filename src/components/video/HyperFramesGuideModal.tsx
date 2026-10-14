@@ -85,7 +85,7 @@ export const HyperFramesGuideModal: React.FC = () => {
                 OR Station Tutorial & Interactive Guide
               </div>
               <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                Offline HyperFrames Motion Synthesis • Zero Cloud Dependency
+                Offline HyperFrames Motion Synthesis &bull; Zero Cloud Dependency
               </div>
             </div>
           </div>

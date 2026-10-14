@@ -20,7 +20,7 @@ import { getOrRooms, type OrRoom } from "../services/masterData";
 import { CaseEventsPanel } from "../components/clinical/CaseEventsPanel";
 
 export const ScheduleView: React.FC = () => {
-  const { db, setView, setSelectedPatientId, setSelectedCaseId, notify } = useApp();
+  const { db, setView, setSelectedPatientId, selectedCaseId, setSelectedCaseId, notify } = useApp();
   const [date, setDate] = useState(localDate());
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [rooms, setRooms] = useState<OrRoom[]>([]);
@@ -56,6 +56,14 @@ export const ScheduleView: React.FC = () => {
     loadData();
   }, [db, date]);
 
+  // If a case was pre-selected from Pre-OR or Patient view, open scheduling modal directly
+  useEffect(() => {
+    if (selectedCaseId) {
+      setSelectedCaseToSched(selectedCaseId);
+      setScheduleModalOpen(true);
+    }
+  }, [selectedCaseId]);
+
   // Load unscheduled cases for modal
   useEffect(() => {
     async function loadCases() {
@@ -64,13 +72,18 @@ export const ScheduleView: React.FC = () => {
         `SELECT c.case_id, c.case_number, c.planned_procedure_summary, p.first_name, p.last_name
          FROM surgical_cases c
          JOIN patients p ON c.patient_id = p.patient_id
-         WHERE c.case_status IN ('PRE_OR', 'NOT_READY', 'READY', 'POSTPONED') AND p.is_active = 1`
+         WHERE (c.case_status IN ('PRE_OR', 'NOT_READY', 'READY', 'POSTPONED') OR c.case_id = ?) AND p.is_active = 1`,
+        [selectedCaseId || ""]
       );
       setAvailableCases(rows);
-      if (rows.length > 0) setSelectedCaseToSched(rows[0].case_id);
+      if (selectedCaseId && rows.some((r: any) => r.case_id === selectedCaseId)) {
+        setSelectedCaseToSched(selectedCaseId);
+      } else if (rows.length > 0 && !selectedCaseToSched) {
+        setSelectedCaseToSched(rows[0].case_id);
+      }
     }
     loadCases();
-  }, [db, scheduleModalOpen]);
+  }, [db, scheduleModalOpen, selectedCaseId]);
 
   // Live conflict validation when modal form values change
   useEffect(() => {
@@ -93,7 +106,15 @@ export const ScheduleView: React.FC = () => {
 
   const handleCreateSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!db || !selectedCaseToSched || !schedRoomId) return;
+    if (!db) return;
+    if (!selectedCaseToSched) {
+      notify("Please select a surgical case to schedule.", "error");
+      return;
+    }
+    if (!schedRoomId) {
+      notify("No Operating Room selected. Please configure OR rooms first.", "error");
+      return;
+    }
 
     try {
       const res = await scheduleCase(db, {
@@ -112,6 +133,7 @@ export const ScheduleView: React.FC = () => {
 
       notify("Case scheduled successfully!", "success");
       setScheduleModalOpen(false);
+      setSelectedCaseId(null);
       await loadData();
     } catch (err) {
       notify((err as Error).message, "error");
@@ -155,8 +177,20 @@ export const ScheduleView: React.FC = () => {
 
       {/* Operating Room Grid Board */}
       <div className="glass-card" style={{ padding: "24px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(rooms.length, 1)}, 1fr)`, gap: "20px" }}>
-          {rooms.map((room) => {
+        {rooms.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "48px 24px" }}>
+            <AlertTriangle size={36} color="var(--warning)" style={{ margin: "0 auto 12px auto" }} />
+            <h3 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "6px" }}>No Operating Rooms Configured</h3>
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", maxWidth: "420px", margin: "0 auto 16px auto" }}>
+              The schedule board requires active operating rooms to assign cases and check conflicts.
+            </p>
+            <button onClick={() => setView("settings")} className="glass-btn glass-btn-primary">
+              Configure Rooms in Settings
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${rooms.length}, 1fr)`, gap: "20px" }}>
+            {rooms.map((room) => {
             const roomSchedules = schedules.filter((s) => s.or_room_id === room.or_room_id);
             return (
               <div
@@ -259,6 +293,7 @@ export const ScheduleView: React.FC = () => {
             );
           })}
         </div>
+        )}
       </div>
 
       {/* Modal: Schedule Case */}

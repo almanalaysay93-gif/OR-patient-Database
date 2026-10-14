@@ -18,6 +18,9 @@ export interface Patient {
   sex: "MALE" | "FEMALE" | "OTHER" | "UNKNOWN" | null;
   address: string | null;
   contact_number: string | null;
+  emergency_contact_name?: string | null;
+  emergency_contact_phone?: string | null;
+  emergency_contact_relationship?: string | null;
   blood_type: string | null;
   is_active: number;
   created_at: string;
@@ -111,6 +114,9 @@ export async function createPatient(
     sex?: "MALE" | "FEMALE" | "OTHER" | "UNKNOWN" | null;
     address?: string | null;
     contactNumber?: string | null;
+    emergencyContactName?: string | null;
+    emergencyContactPhone?: string | null;
+    emergencyContactRelationship?: string | null;
     bloodType?: string | null;
     userId?: string | null;
   }
@@ -141,9 +147,10 @@ export async function createPatient(
     await tx.execute(
       `INSERT INTO patients (
         patient_id, research_seq, hrn, first_name, middle_name, last_name, suffix,
-        date_of_birth, sex, address, contact_number, blood_type, is_active,
-        created_by, updated_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+        date_of_birth, sex, address, contact_number,
+        emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+        blood_type, is_active, created_by, updated_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
       [
         patientId,
         researchSeq,
@@ -156,6 +163,9 @@ export async function createPatient(
         params.sex || null,
         params.address?.trim() || null,
         params.contactNumber?.trim() || null,
+        params.emergencyContactName?.trim() || null,
+        params.emergencyContactPhone?.trim() || null,
+        params.emergencyContactRelationship?.trim() || null,
         params.bloodType || null,
         params.userId || null,
         params.userId || null,
@@ -187,6 +197,9 @@ export interface PatientDetails {
   sex?: Patient["sex"];
   address?: string | null;
   contactNumber?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  emergencyContactRelationship?: string | null;
   bloodType?: string | null;
 }
 
@@ -210,6 +223,9 @@ export async function updatePatient(db: Db, patientId: string, details: PatientD
     sex: details.sex || null,
     address: text(details.address),
     contact_number: text(details.contactNumber),
+    emergency_contact_name: text(details.emergencyContactName),
+    emergency_contact_phone: text(details.emergencyContactPhone),
+    emergency_contact_relationship: text(details.emergencyContactRelationship),
     blood_type: text(details.bloodType),
   };
   if (!next.first_name || !next.last_name) throw new Error("First name and last name are required.");

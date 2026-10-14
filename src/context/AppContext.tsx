@@ -63,6 +63,7 @@ interface AppContextValue {
   videoGuideOpen: boolean;
   searchOpen: boolean;
   assistantOpen: boolean;
+  openRegisterModal: boolean;
   // Actions
   setView: (v: NavView) => void;
   setSelectedPatientId: (id: string | null) => void;
@@ -72,6 +73,7 @@ interface AppContextValue {
   setVideoGuideOpen: (open: boolean) => void;
   setSearchOpen: (open: boolean) => void;
   setAssistantOpen: (open: boolean) => void;
+  setOpenRegisterModal: (open: boolean) => void;
   onLogout: () => void;
   notify: (msg: string, type?: "info" | "success" | "warning" | "error") => void;
   toast: { message: string; type: "info" | "success" | "warning" | "error" } | null;
@@ -95,6 +97,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [videoGuideOpen, setVideoGuideOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [openRegisterModal, setOpenRegisterModal] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "info" | "success" | "warning" | "error" } | null>(null);
 
   const notify = (message: string, type: "info" | "success" | "warning" | "error" = "info") => {
@@ -290,6 +293,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         videoGuideOpen,
         searchOpen,
         assistantOpen,
+        openRegisterModal,
         setView: (v) => { if (canOpenView(session, v)) setCurrentView(v); },
         setSelectedPatientId,
         setSelectedCaseId,
@@ -298,6 +302,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setVideoGuideOpen,
         setSearchOpen,
         setAssistantOpen,
+        setOpenRegisterModal,
         onLogout,
         notify,
         toast,

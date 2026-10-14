@@ -8,7 +8,7 @@ describe("Database migrations", () => {
     const result = await runMigrations(db);
 
     expect(result.fromVersion).toBe(0);
-    expect(result.toVersion).toBe(15);
+    expect(result.toVersion).toBe(16);
     expect(result.applied).toEqual([
       "1_initial_schema",
       "2_seed_reference_data",
@@ -25,7 +25,14 @@ describe("Database migrations", () => {
       "13_set_admin_password",
       "14_laboratory_and_attachments",
       "15_enforce_admin_password",
+      "16_clinical_fixes_and_allergies",
     ]);
+
+    // Check allergies table and case_implants table created in migration 016
+    const tables = await db.select<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('allergies', 'case_implants')"
+    );
+    expect(tables.length).toBe(2);
 
     // Check roles
     const roles = await db.select<{ role_id: string; name: string }>(

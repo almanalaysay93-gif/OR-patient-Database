@@ -77,6 +77,21 @@ export async function saveCaseEvent(
       entityType: "CASE_EVENT", recordId: old?.event_id || params.eventType,
       oldValue: old?.occurred_at || null, newValue: JSON.stringify({ occurredAt: params.occurredAt, reason: params.correctionReason || null }),
     });
+
+    // Synchronize or_schedule actual timestamps
+    const timeColumnMap: Partial<Record<CaseEventType, string>> = {
+      ROOM_IN: "actual_room_in",
+      INCISION: "actual_procedure_start",
+      CLOSURE: "actual_procedure_end",
+      ROOM_OUT: "actual_room_out",
+    };
+    const col = timeColumnMap[params.eventType];
+    if (col) {
+      await tx.execute(
+        `UPDATE or_schedule SET ${col} = ?, updated_at = ? WHERE case_id = ?`,
+        [params.occurredAt, now, params.caseId]
+      );
+    }
   });
 }
 
