@@ -60,6 +60,11 @@ const PRE_OP: Column[] = [
   col("ASA Class (baseline)", "baseline_asa"),
   col("Tobacco Status", "tobacco_status"),
   col("Functional Status", "functional_status"),
+  col("Dialysis", "dialysis_modality"),
+  col("Dialysis Access", "dialysis_access"),
+  col("Years on Dialysis", "dialysis_years"),
+  col("Donor Relation", "donor_relation"),
+  col("Donor Relationship Type", "donor_relationship_type"),
   col("Readiness Status", "readiness_status"),
   col("Readiness %", "readiness_percentage"),
   col("Checklist Items Complete", "checklist_done"),
@@ -162,6 +167,8 @@ export async function buildClinicalExport(db: Db, opts: ExportOptions): Promise<
        a.admission_number, a.admission_date, a.ward,
        sp.name AS specialty_name,
        b.height_cm, b.weight_kg, b.asa_classification AS baseline_asa, b.tobacco_status, b.functional_status,
+       b.dialysis_modality, b.dialysis_access, b.dialysis_years, b.donor_relation,
+       drt.name AS donor_relationship_type,
        b.notes AS baseline_notes,
        pa.readiness_status, pa.readiness_percentage, pa.notes AS preop_notes,
        r.name AS room_name, s.scheduled_start, s.estimated_duration_minutes, s.schedule_status,
@@ -177,6 +184,7 @@ export async function buildClinicalExport(db: Db, opts: ExportOptions): Promise<
      LEFT JOIN admissions a ON a.admission_id = c.admission_id
      LEFT JOIN specialties sp ON sp.specialty_id = c.specialty_id
      LEFT JOIN case_preop_baseline b ON b.case_id = c.case_id
+     LEFT JOIN donor_relationship_types drt ON drt.relationship_type_id = b.donor_relationship_type_id
      LEFT JOIN pre_or_assessments pa ON pa.case_id = c.case_id
      LEFT JOIN or_schedule s ON s.case_id = c.case_id
      LEFT JOIN or_rooms r ON r.or_room_id = s.or_room_id

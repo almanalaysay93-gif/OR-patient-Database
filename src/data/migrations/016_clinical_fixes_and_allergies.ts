@@ -7,7 +7,6 @@
  * 4. Creates structured surgical implants table for device/lot/serial tracking.
  * 5. Adds emergency contact columns to patients table.
  */
-const now = `strftime('%Y-%m-%dT%H:%M:%fZ','now')`;
 
 export const M016_CLINICAL_FIXES_AND_ALLERGIES = /* sql */ `
 -- 1. Structured Allergies Table

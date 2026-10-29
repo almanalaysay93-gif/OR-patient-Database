@@ -16,6 +16,8 @@ import { M013_SET_ADMIN_PASSWORD } from "./013_set_admin_password";
 import { M014_LABORATORY_AND_ATTACHMENTS } from "./014_laboratory_and_attachments";
 import { M015_ENFORCE_ADMIN_PASSWORD } from "./015_enforce_admin_password";
 import { M016_CLINICAL_FIXES_AND_ALLERGIES } from "./016_clinical_fixes_and_allergies";
+import { M017_PREOP_DIALYSIS_AND_DONOR } from "./017_preop_dialysis_and_donor";
+import { M018_DONOR_RELATIONSHIP_TYPES } from "./018_donor_relationship_types";
 
 export interface Migration {
   version: number;
@@ -41,6 +43,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 14, name: "laboratory_and_attachments", sql: M014_LABORATORY_AND_ATTACHMENTS },
   { version: 15, name: "enforce_admin_password", sql: M015_ENFORCE_ADMIN_PASSWORD },
   { version: 16, name: "clinical_fixes_and_allergies", sql: M016_CLINICAL_FIXES_AND_ALLERGIES },
+  { version: 17, name: "preop_dialysis_and_donor", sql: M017_PREOP_DIALYSIS_AND_DONOR },
+  { version: 18, name: "donor_relationship_types", sql: M018_DONOR_RELATIONSHIP_TYPES },
 ];
 
 export interface MigrationResult {

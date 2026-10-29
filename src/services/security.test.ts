@@ -14,6 +14,7 @@ import {
 } from "./patients";
 import { getPreOrChecklist, updateChecklistItem } from "./preOr";
 import { getPreopBaseline, savePreopBaseline } from "./preopBaseline";
+import { addDonorRelationshipType, getDonorRelationshipTypes, setDonorRelationshipTypeActive } from "./donorRelationships";
 import { getSafetyItems, phaseComplete, saveSafetyResponse } from "./safetyPhases";
 import { getCaseEvents, saveCaseEvent } from "./caseEvents";
 import { getScheduleByDate, scheduleCase } from "./scheduling";
@@ -398,6 +399,55 @@ describe("F1-F5 clinical rules", () => {
     await savePreopBaseline(db, { ...base, weight_kg: 62 });
     const saved = await getPreopBaseline(db, c.case_id);
     expect(saved).toMatchObject({ height_cm: 160, weight_kg: 62, notes: "fit", assessed_by: MASTER_ADMIN_ID });
+  });
+
+  it("stores dialysis type, access, years on dialysis and donor relation", async () => {
+    const { c } = await makeCase();
+    const base = {
+      caseId: c.case_id, height_cm: null, weight_kg: null, measured_at: null, asa_classification: null,
+      tobacco_status: null, functional_status: null, notes: null,
+    };
+    await expect(savePreopBaseline(db, { ...base, dialysis_modality: "HEMODIALYSIS", dialysis_years: 61 }))
+      .rejects.toThrow("Years on dialysis");
+    await expect(savePreopBaseline(db, { ...base, dialysis_modality: "HEMODIALYSIS", dialysis_years: -1 }))
+      .rejects.toThrow("Years on dialysis");
+    await expect(savePreopBaseline(db, { ...base, dialysis_modality: "NONE", dialysis_access: "AV_FISTULA" }))
+      .rejects.toThrow("dialysis type");
+    await savePreopBaseline(db, {
+      ...base, dialysis_modality: "HEMODIALYSIS", dialysis_access: "AV_FISTULA", dialysis_years: 3.5, donor_relation: "RELATED",
+    });
+    expect(await getPreopBaseline(db, c.case_id)).toMatchObject({
+      dialysis_modality: "HEMODIALYSIS", dialysis_access: "AV_FISTULA", dialysis_years: 3.5, donor_relation: "RELATED",
+    });
+    await savePreopBaseline(db, { ...base, dialysis_modality: "NONE", donor_relation: "NON_RELATED" });
+    expect(await getPreopBaseline(db, c.case_id)).toMatchObject({
+      dialysis_modality: "NONE", dialysis_access: null, dialysis_years: null, donor_relation: "NON_RELATED",
+    });
+  });
+
+  it("stores a donor type of relation that matches the related or non-related choice", async () => {
+    const { c } = await makeCase();
+    const base = {
+      caseId: c.case_id, height_cm: null, weight_kg: null, measured_at: null, asa_classification: null,
+      tobacco_status: null, functional_status: null, notes: null,
+    };
+    const types = await getDonorRelationshipTypes(db);
+    expect(types.find((t) => t.relationship_type_id === "drt-sister")?.donor_relation).toBe("RELATED");
+    expect(types.find((t) => t.relationship_type_id === "drt-spouse")?.donor_relation).toBe("NON_RELATED");
+    await expect(savePreopBaseline(db, { ...base, donor_relation: "NON_RELATED", donor_relationship_type_id: "drt-sister" }))
+      .rejects.toThrow("does not match");
+    await expect(savePreopBaseline(db, { ...base, donor_relationship_type_id: "drt-sister" }))
+      .rejects.toThrow("before the type of relation");
+    await expect(savePreopBaseline(db, { ...base, donor_relation: "RELATED", donor_relationship_type_id: "missing" }))
+      .rejects.toThrow("not found");
+    await savePreopBaseline(db, { ...base, donor_relation: "RELATED", donor_relationship_type_id: "drt-sister" });
+    expect(await getPreopBaseline(db, c.case_id)).toMatchObject({ donor_relationship_type_id: "drt-sister" });
+
+    const id = await addDonorRelationshipType(db, " Step-sibling ", "RELATED");
+    await expect(addDonorRelationshipType(db, "step-SIBLING", "RELATED")).rejects.toThrow("already exists");
+    await setDonorRelationshipTypeActive(db, id, false);
+    expect((await getDonorRelationshipTypes(db)).some((t) => t.relationship_type_id === id)).toBe(false);
+    expect((await getDonorRelationshipTypes(db, false)).find((t) => t.relationship_type_id === id)?.name).toBe("Step-sibling");
   });
 
   it("requires a note for a failed safety check and tracks phase completion", async () => {

@@ -79,7 +79,7 @@ describe("Clinical Fixes & Features Suite", () => {
       expect(a1.severity).toBe("LIFE_THREATENING");
       expect(a1.reaction).toBe("Anaphylaxis");
 
-      const a2 = await createPatientAllergy(db, {
+      await createPatientAllergy(db, {
         patientId: p.patient_id,
         allergen: "Latex",
         reaction: "Contact dermatitis",

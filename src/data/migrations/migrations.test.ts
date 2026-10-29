@@ -8,7 +8,7 @@ describe("Database migrations", () => {
     const result = await runMigrations(db);
 
     expect(result.fromVersion).toBe(0);
-    expect(result.toVersion).toBe(16);
+    expect(result.toVersion).toBe(18);
     expect(result.applied).toEqual([
       "1_initial_schema",
       "2_seed_reference_data",
@@ -26,6 +26,8 @@ describe("Database migrations", () => {
       "14_laboratory_and_attachments",
       "15_enforce_admin_password",
       "16_clinical_fixes_and_allergies",
+      "17_preop_dialysis_and_donor",
+      "18_donor_relationship_types",
     ]);
 
     // Check allergies table and case_implants table created in migration 016

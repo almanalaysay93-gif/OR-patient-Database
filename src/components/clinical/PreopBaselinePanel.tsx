@@ -1,6 +1,19 @@
 import { useEffect, useState } from "react";
 import { useApp } from "../../context/AppContext";
-import { getPreopBaseline, savePreopBaseline, type PreopBaseline } from "../../services/preopBaseline";
+import {
+  DIALYSIS_ACCESSES, DIALYSIS_MODALITIES, DONOR_RELATIONS, getPreopBaseline, savePreopBaseline,
+  type DialysisAccess, type DialysisModality, type DonorRelation, type PreopBaseline,
+} from "../../services/preopBaseline";
+import { getDonorRelationshipTypes, type DonorRelationshipType } from "../../services/donorRelationships";
+
+const MODALITY_LABELS: Record<DialysisModality, string> = {
+  NONE: "None (not on dialysis)", HEMODIALYSIS: "Hemodialysis", PERITONEAL_DIALYSIS: "Peritoneal dialysis", UNKNOWN: "Unknown",
+};
+const ACCESS_LABELS: Record<DialysisAccess, string> = {
+  AV_FISTULA: "AV fistula", AV_GRAFT: "AV graft", TUNNELED_CATHETER: "Tunneled catheter",
+  NON_TUNNELED_CATHETER: "Non-tunneled catheter", PD_CATHETER: "PD catheter", OTHER: "Other",
+};
+const DONOR_LABELS: Record<DonorRelation, string> = { RELATED: "Related donor", NON_RELATED: "Non-related donor" };
 
 export function PreopBaselinePanel({ caseId }: { caseId: string }) {
   const { db, session, notify } = useApp();
@@ -10,7 +23,19 @@ export function PreopBaselinePanel({ caseId }: { caseId: string }) {
   const [asa, setAsa] = useState("");
   const [tobacco, setTobacco] = useState<NonNullable<PreopBaseline["tobacco_status"]> | "">("");
   const [functional, setFunctional] = useState<NonNullable<PreopBaseline["functional_status"]> | "">("");
+  const [modality, setModality] = useState<DialysisModality | "">("");
+  const [access, setAccess] = useState<DialysisAccess | "">("");
+  const [years, setYears] = useState("");
+  const [donor, setDonor] = useState<DonorRelation | "">("");
+  const [relationshipType, setRelationshipType] = useState("");
+  const [relationshipTypes, setRelationshipTypes] = useState<DonorRelationshipType[]>([]);
   const [notes, setNotes] = useState("");
+  const onDialysis = modality !== "" && modality !== "NONE";
+
+  useEffect(() => {
+    if (!db) return;
+    getDonorRelationshipTypes(db, false).then(setRelationshipTypes).catch((err) => notify((err as Error).message, "error"));
+  }, [db]);
 
   useEffect(() => {
     if (!db) return;
@@ -21,6 +46,11 @@ export function PreopBaselinePanel({ caseId }: { caseId: string }) {
       setAsa(r?.asa_classification || "");
       setTobacco(r?.tobacco_status || "");
       setFunctional(r?.functional_status || "");
+      setModality(r?.dialysis_modality || "");
+      setAccess(r?.dialysis_access || "");
+      setYears(r?.dialysis_years?.toString() || "");
+      setDonor(r?.donor_relation || "");
+      setRelationshipType(r?.donor_relationship_type_id || "");
       setNotes(r?.notes || "");
     }).catch((err) => notify((err as Error).message, "error"));
   }, [db, caseId]);
@@ -32,7 +62,12 @@ export function PreopBaselinePanel({ caseId }: { caseId: string }) {
         caseId, userId: session?.userId, height_cm: height ? Number(height) : null,
         weight_kg: weight ? Number(weight) : null, measured_at: measuredAt || null,
         asa_classification: asa || null,
-        tobacco_status: tobacco || null, functional_status: functional || null, notes,
+        tobacco_status: tobacco || null, functional_status: functional || null,
+        dialysis_modality: modality || null,
+        dialysis_access: onDialysis ? access || null : null,
+        dialysis_years: onDialysis && years ? Number(years) : null,
+        donor_relation: donor || null,
+        donor_relationship_type_id: donor ? relationshipType || null : null, notes,
       });
       notify("Preoperative baseline saved.", "success");
     } catch (err) {
@@ -69,6 +104,46 @@ export function PreopBaselinePanel({ caseId }: { caseId: string }) {
             <option key={v} value={v}>{v.replace(/_/g, " ")}</option>)}
         </select>
       </label>
+      <fieldset style={{ border: "1px solid var(--border-subtle)", borderRadius: 10, padding: 12, display: "grid", gap: 10, margin: 0 }}>
+        <legend style={{ fontSize: 14, fontWeight: 600, padding: "0 6px" }}>Dialysis and donor</legend>
+        <label>Dialysis
+          <select className="glass-input" value={modality} onChange={(e) => setModality(e.target.value as DialysisModality | "")}>
+            <option value="">Not assessed</option>
+            {DIALYSIS_MODALITIES.map((v) => <option key={v} value={v}>{MODALITY_LABELS[v]}</option>)}
+          </select>
+        </label>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <label>Dialysis access
+            <select className="glass-input" value={onDialysis ? access : ""} disabled={!onDialysis}
+              onChange={(e) => setAccess(e.target.value as DialysisAccess | "")}>
+              <option value="">Not assessed</option>
+              {DIALYSIS_ACCESSES.map((v) => <option key={v} value={v}>{ACCESS_LABELS[v]}</option>)}
+            </select>
+          </label>
+          <label>Years on dialysis
+            <input className="glass-input" type="number" min="0" max="60" step="0.1" disabled={!onDialysis}
+              value={onDialysis ? years : ""} onChange={(e) => setYears(e.target.value)} />
+          </label>
+        </div>
+        <label>Donor
+          <select className="glass-input" value={donor} onChange={(e) => {
+            setDonor(e.target.value as DonorRelation | "");
+            setRelationshipType("");
+          }}>
+            <option value="">Not assessed</option>
+            {DONOR_RELATIONS.map((v) => <option key={v} value={v}>{DONOR_LABELS[v]}</option>)}
+          </select>
+        </label>
+        <label>Type of relation
+          <select className="glass-input" value={donor ? relationshipType : ""} disabled={!donor}
+            onChange={(e) => setRelationshipType(e.target.value)}>
+            <option value="">Not specified</option>
+            {relationshipTypes
+              .filter((t) => t.donor_relation === donor && (t.active || t.relationship_type_id === relationshipType))
+              .map((t) => <option key={t.relationship_type_id} value={t.relationship_type_id}>{t.name}</option>)}
+          </select>
+        </label>
+      </fieldset>
       <label>Notes<textarea className="glass-input" value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
       <button type="button" className="glass-btn glass-btn-primary" onClick={save}>Save baseline</button>
     </section>
