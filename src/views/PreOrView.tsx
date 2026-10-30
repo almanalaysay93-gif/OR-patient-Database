@@ -1,8 +1,5 @@
 import React, { useEffect, useState } from "react";
-import {
-  ArrowRight,
-  X,
-} from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { CaseActions } from "../components/clinical/CaseActions";
 import {
@@ -14,6 +11,8 @@ import {
 } from "../services/preOr";
 import { PreopBaselinePanel } from "../components/clinical/PreopBaselinePanel";
 import { SafetyPhasesPanel } from "../components/clinical/SafetyPhasesPanel";
+import { filterBoardRows, pageBoardRows } from "../services/preOrBoardTable";
+import type { CaseStatus } from "../services/patients";
 
 export const PreOrView: React.FC = () => {
   const { db, session, selectedCaseId, setSelectedCaseId, setSelectedPatientId, setView, notify } = useApp();
@@ -21,6 +20,9 @@ export const PreOrView: React.FC = () => {
   const [activeChecklistCase, setActiveChecklistCase] = useState<any | null>(null);
   const [checklistItems, setChecklistItems] = useState<ChecklistItemValue[]>([]);
   const [readiness, setReadiness] = useState<ReadinessCalculation | null>(null);
+  const [query, setQuery] = useState("");
+  const [stage, setStage] = useState<CaseStatus | null>(null);
+  const [page, setPage] = useState(1);
 
   const loadBoard = async () => {
     if (!db) return;
@@ -76,109 +78,124 @@ export const PreOrView: React.FC = () => {
     }
   };
 
-  const columns = [
-    { title: "Not Started", status: "PRE_OR", color: "var(--text-muted)" },
-    { title: "Incomplete / Blocked", status: "NOT_READY", color: "var(--warning)" },
-    { title: "Ready for OR", status: "READY", color: "var(--success)" },
-    { title: "Scheduled", status: "SCHEDULED", color: "var(--primary)" },
+  const stages: { value: CaseStatus | null; label: string }[] = [
+    { value: null, label: "All" },
+    { value: "PRE_OR", label: "Not Started" },
+    { value: "NOT_READY", label: "Incomplete / Blocked" },
+    { value: "READY", label: "Ready for OR" },
+    { value: "SCHEDULED", label: "Scheduled" },
   ];
+  const stageCount = (value: CaseStatus | null) =>
+    value ? boardCases.filter((c) => c.case_status === value).length : boardCases.length;
+  const matches = filterBoardRows(boardCases, query, stage);
+  const pageData = pageBoardRows(matches, page);
+  const readinessClass = (p: number) => (p >= 100 ? "badge-success" : p > 50 ? "badge-warning" : "badge-danger");
 
   return (
-    <div style={{ padding: "32px", display: "flex", flexDirection: "column", gap: "24px" }}>
-      {/* Title */}
+    <div style={{ padding: "32px", display: "flex", flexDirection: "column", gap: "20px" }}>
       <div>
         <h1 style={{ fontSize: "28px", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text-main)" }}>
           Pre-OR Safety & Readiness Board
         </h1>
         <p style={{ fontSize: "14px", color: "var(--text-muted)", marginTop: "4px" }}>
-          Dynamic checklist tracking with readiness calculations. Non-applicable items do not penalize readiness.
+          Search, filter and open a case to complete its checklist. Non-applicable items do not penalize readiness.
         </p>
       </div>
 
-      {/* Kanban Columns */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "18px" }}>
-        {columns.map((col) => {
-          const colCases = boardCases.filter((c) => c.case_status === col.status);
-          return (
-            <div
-              key={col.status}
-              className="glass-card"
-              style={{
-                background: "rgba(255, 255, 255, 0.55)",
-                padding: "18px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "14px",
-                minHeight: "560px",
-              }}
+      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ position: "relative", flex: "1 1 320px", maxWidth: "480px" }}>
+          <Search size={16} aria-hidden="true" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-subtle)" }} />
+          <input
+            className="glass-input"
+            type="search"
+            aria-label="Search cases by patient, HRN, case number, procedure or room"
+            placeholder="Search patient, HRN, case, procedure or room"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setPage(1); }}
+            style={{ width: "100%", paddingLeft: 36 }}
+          />
+        </div>
+        <div role="group" aria-label="Filter by stage" style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          {stages.map((s) => (
+            <button
+              key={s.label}
+              type="button"
+              aria-pressed={stage === s.value}
+              onClick={() => { setStage(s.value); setPage(1); }}
+              className={stage === s.value ? "glass-btn glass-btn-primary" : "glass-btn glass-btn-secondary"}
+              style={{ fontSize: "12px", padding: "6px 12px" }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-glass)", paddingBottom: "10px" }}>
-                <span style={{ fontWeight: 700, fontSize: "14px", color: col.color }}>
-                  {col.title}
-                </span>
-                <span className="badge badge-neutral" style={{ fontSize: "11px" }}>
-                  {colCases.length}
-                </span>
-              </div>
+              {s.label} <span style={{ opacity: 0.75 }}>({stageCount(s.value)})</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {colCases.map((c) => (
-                  <div
-                    key={c.case_id}
-                    onClick={() => {
-                      setSelectedCaseId(c.case_id);
-                      setSelectedPatientId(c.patient_id);
-                    }}
-                    style={{
-                      background: "var(--bg-card)",
-                      border: "1px solid var(--border-subtle)",
-                      borderRadius: "12px",
-                      padding: "14px",
-                      cursor: "pointer",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "8px",
-                      boxShadow: "var(--shadow-sm)",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--primary) ")}
-                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-subtle)")}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <span style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-main)" }}>
-                        {c.patient_name}
-                      </span>
-                      <span
-                        className={`badge ${
-                          c.readiness_percentage >= 100
-                            ? "badge-success"
-                            : c.readiness_percentage > 50
-                            ? "badge-warning"
-                            : "badge-danger"
-                        }`}
-                        style={{ fontSize: "11px" }}
-                      >
-                        {c.readiness_percentage}% Ready
-                      </span>
-                    </div>
-
-                    <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                      {c.planned_procedure_summary || "Procedure"}
-                    </div>
-
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-subtle)", borderTop: "1px solid var(--border-subtle)", paddingTop: "6px" }}>
-                      <span>Case: {c.case_number}</span>
-                      <span>{c.room_name || "Unassigned"}</span>
-                    </div>
+      <div className="glass-card" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <thead>
+              <tr style={{ textAlign: "left", color: "var(--text-muted)", borderBottom: "1px solid var(--border-glass)" }}>
+                {["Patient", "HRN", "Case", "Procedure", "Stage", "Room", "Readiness", "Actions"].map((h) => (
+                  <th key={h} scope="col" style={{ padding: "12px 14px", fontWeight: 700, fontSize: "12px", whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {pageData.rows.map((c) => (
+                <tr
+                  key={c.case_id}
+                  onClick={() => { setSelectedCaseId(c.case_id); setSelectedPatientId(c.patient_id); }}
+                  style={{ cursor: "pointer", borderBottom: "1px solid var(--border-subtle)" }}
+                >
+                  <td style={{ padding: "12px 14px", fontWeight: 700, color: "var(--text-main)", whiteSpace: "nowrap" }}>{c.patient_name}</td>
+                  <td style={{ padding: "12px 14px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{c.hrn || "-"}</td>
+                  <td style={{ padding: "12px 14px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{c.case_number}</td>
+                  <td style={{ padding: "12px 14px", color: "var(--text-main)", minWidth: 200 }}>{c.planned_procedure_summary || "Procedure"}</td>
+                  <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+                    {stages.find((s) => s.value === c.case_status)?.label || c.case_status}
+                  </td>
+                  <td style={{ padding: "12px 14px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{c.room_name || "Unassigned"}</td>
+                  <td style={{ padding: "12px 14px" }}>
+                    <span className={`badge ${readinessClass(c.readiness_percentage)}`} style={{ fontSize: "11px" }}>
+                      {c.readiness_percentage}%
+                    </span>
+                  </td>
+                  <td style={{ padding: "12px 14px" }} onClick={(e) => e.stopPropagation()}>
                     <CaseActions
                       caseId={c.case_id} status={c.case_status}
                       caseLabel={`${c.case_number} - ${c.patient_name}`} onDone={loadBoard}
                     />
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
+                  </td>
+                </tr>
+              ))}
+              {pageData.rows.length === 0 && (
+                <tr>
+                  <td colSpan={8} style={{ padding: "32px", textAlign: "center", color: "var(--text-muted)" }}>
+                    {boardCases.length === 0 ? "No cases on the Pre-OR board." : "No cases match this search or stage."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <nav aria-label="Board pages" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", padding: "12px 14px", borderTop: "1px solid var(--border-glass)", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "12px", color: "var(--text-muted)" }} aria-live="polite">
+            {pageData.total === 0 ? "0 cases" : `Showing ${pageData.from}-${pageData.to} of ${pageData.total}`}
+          </span>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button type="button" className="glass-btn glass-btn-secondary" disabled={pageData.page <= 1}
+              onClick={() => setPage(pageData.page - 1)} style={{ padding: "6px 10px" }} aria-label="Previous page">
+              <ChevronLeft size={14} />
+            </button>
+            <span style={{ fontSize: "12px", color: "var(--text-main)" }}>Page {pageData.page} of {pageData.pageCount}</span>
+            <button type="button" className="glass-btn glass-btn-secondary" disabled={pageData.page >= pageData.pageCount}
+              onClick={() => setPage(pageData.page + 1)} style={{ padding: "6px 10px" }} aria-label="Next page">
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </nav>
       </div>
 
       {/* Checklist Assessment Modal / Drawer */}
