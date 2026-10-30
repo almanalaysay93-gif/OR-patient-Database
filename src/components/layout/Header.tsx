@@ -11,7 +11,6 @@ import {
   Lock,
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
-import { isTauri } from "../../data/tauri-adapter";
 
 export const Header: React.FC = () => {
   const {
@@ -34,26 +33,7 @@ export const Header: React.FC = () => {
     else setVisualEffects("FULL");
   };
 
-  // The browser preview keeps its database unencrypted in IndexedDB and is public.
-  const demoOnly = !isTauri();
-
   return (
-    <>
-    {demoOnly && (
-      <div
-        role="note"
-        data-testid="demo-banner"
-        style={{
-          padding: "8px 28px",
-          fontSize: "13px",
-          fontWeight: 600,
-          background: "var(--warning-light)",
-          borderBottom: "1px solid var(--warning-border)",
-        }}
-      >
-        Demo only. Do not enter real patient data.
-      </div>
-    )}
     <header className="glass-header" style={{ height: "64px", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 28px" }}>
       {/* Global Search Button */}
       <button
@@ -158,6 +138,5 @@ export const Header: React.FC = () => {
         )}
       </div>
     </header>
-    </>
   );
 };
