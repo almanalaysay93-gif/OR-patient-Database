@@ -23,6 +23,7 @@ import {
 import { CaseEventsPanel } from "../components/clinical/CaseEventsPanel";
 import { FollowupPanel } from "../components/clinical/FollowupPanel";
 import { getFollowupQueue } from "../services/followup";
+import { DataTable } from "../components/common/DataTable";
 
 export const PostOrView: React.FC = () => {
   const { db, session, selectedCaseId, setSelectedCaseId, notify } = useApp();
@@ -159,15 +160,30 @@ export const PostOrView: React.FC = () => {
 
   if (!selectedCaseId || !surgicalCase) {
     return (
-      <div style={{ padding: 32 }}>
-        <h1>Postoperative follow-up queue</h1>
-        {followupQueue.map((item) => (
-          <button key={item.case_id} type="button" className="glass-btn glass-btn-secondary"
-            style={{ display: "block", marginTop: 8 }} onClick={() => setSelectedCaseId(item.case_id)}>
-            {item.case_number}: {item.patient_name} - {item.status} {item.due_date || "Date needed"}
-          </button>
-        ))}
-        {followupQueue.length === 0 && <p>Select a case from Patients or Schedule.</p>}
+      <div style={{ padding: "32px", display: "flex", flexDirection: "column", gap: "20px" }}>
+        <div>
+          <h1 style={{ fontSize: "28px", fontWeight: 800, letterSpacing: "-0.03em", color: "var(--text-main)" }}>Postoperative follow-up queue</h1>
+          <p style={{ fontSize: "14px", color: "var(--text-muted)", marginTop: "4px" }}>
+            Open a case to record its post-OR and PACU data. Select a case from Patients or Schedule to start a new record.
+          </p>
+        </div>
+        <DataTable<any>
+          caption="Postoperative follow-up queue"
+          rows={followupQueue}
+          rowKey={(item) => item.case_id}
+          searchText={(item) => [item.case_number, item.patient_name, item.status].filter(Boolean).join(" ")}
+          searchLabel="Search follow-up queue"
+          searchPlaceholder="Search case, patient or status"
+          onRowClick={(item) => setSelectedCaseId(item.case_id)}
+          emptyMessage="No follow-up cases. Select a case from Patients or Schedule."
+          columns={[
+            { key: "case", header: "Case", nowrap: true, render: (item) => <span className="badge badge-primary">{item.case_number}</span> },
+            { key: "patient", header: "Patient", render: (item) => <strong>{item.patient_name}</strong> },
+            { key: "status", header: "Status", nowrap: true, render: (item) => item.status },
+            { key: "due", header: "Follow-up due", nowrap: true, render: (item) => item.due_date || <span style={{ color: "var(--warning)" }}>Date needed</span> },
+            { key: "open", header: "", align: "right", render: () => <span className="glass-btn glass-btn-secondary" style={{ fontSize: "11px", padding: "4px 10px" }}>Open</span> },
+          ]}
+        />
       </div>
     );
   }

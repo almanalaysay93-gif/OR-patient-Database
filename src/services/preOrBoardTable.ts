@@ -29,8 +29,8 @@ export function filterBoardRows(rows: BoardRow[], query: string, stage: CaseStat
   });
 }
 
-export interface BoardPage {
-  rows: BoardRow[];
+export interface BoardPage<T = BoardRow> {
+  rows: T[];
   page: number;
   pageCount: number;
   from: number;
@@ -39,7 +39,7 @@ export interface BoardPage {
 }
 
 /** Clamps the page to the valid range, so a shorter result set never shows an empty page. */
-export function pageBoardRows(rows: BoardRow[], page: number, size = BOARD_PAGE_SIZE): BoardPage {
+export function pageBoardRows<T = BoardRow>(rows: T[], page: number, size = BOARD_PAGE_SIZE): BoardPage<T> {
   const total = rows.length;
   const pageCount = Math.max(1, Math.ceil(total / size));
   const current = Math.min(Math.max(1, page), pageCount);

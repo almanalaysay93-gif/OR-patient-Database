@@ -18,6 +18,7 @@ import {
 } from "../services/scheduling";
 import { getOrRooms, type OrRoom } from "../services/masterData";
 import { CaseEventsPanel } from "../components/clinical/CaseEventsPanel";
+import { DataTable } from "../components/common/DataTable";
 
 export const ScheduleView: React.FC = () => {
   const { db, setView, setSelectedPatientId, selectedCaseId, setSelectedCaseId, notify } = useApp();
@@ -175,126 +176,72 @@ export const ScheduleView: React.FC = () => {
         </div>
       </div>
 
-      {/* Operating Room Grid Board */}
-      <div className="glass-card" style={{ padding: "24px" }}>
-        {rooms.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "48px 24px" }}>
-            <AlertTriangle size={36} color="var(--warning)" style={{ margin: "0 auto 12px auto" }} />
-            <h3 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "6px" }}>No Operating Rooms Configured</h3>
-            <p style={{ fontSize: "13px", color: "var(--text-muted)", maxWidth: "420px", margin: "0 auto 16px auto" }}>
-              The schedule board requires active operating rooms to assign cases and check conflicts.
-            </p>
-            <button onClick={() => setView("settings")} className="glass-btn glass-btn-primary">
-              Configure Rooms in Settings
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${rooms.length}, 1fr)`, gap: "20px" }}>
-            {rooms.map((room) => {
-            const roomSchedules = schedules.filter((s) => s.or_room_id === room.or_room_id);
-            return (
-              <div
-                key={room.or_room_id}
-                style={{
-                  background: "var(--bg-card)",
-                  border: "1px solid var(--border-glass)",
-                  borderRadius: "16px",
-                  padding: "18px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "14px",
-                  minHeight: "500px",
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-glass)", paddingBottom: "10px" }}>
-                  <span style={{ fontWeight: 800, fontSize: "16px", color: "var(--text-main)" }}>
-                    {room.name}
-                  </span>
-                  <span className="badge badge-neutral" style={{ fontSize: "11px" }}>
-                    {roomSchedules.filter((s) => s.schedule_status !== "CANCELLED" && s.schedule_status !== "POSTPONED").length} Case(s)
-                  </span>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                  {roomSchedules.map((s) => (
-                    <div
-                      key={s.schedule_id}
-                      style={{
-                        background: "var(--bg-card-hover)",
-                        border: "1px solid var(--border-subtle)",
-                        borderRadius: "12px",
-                        padding: "14px",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "8px",
-                        boxShadow: "var(--shadow-sm)",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontWeight: 700, color: "var(--primary)", fontSize: "13px" }}>
-                          {s.scheduled_start} - {s.scheduled_end} ({s.estimated_duration_minutes}m)
-                        </span>
-                        <span style={{ display: "flex", gap: "6px" }}>
-                          {(s.schedule_status === "CANCELLED" || s.schedule_status === "POSTPONED") && (
-                            <span className="badge badge-danger">{s.schedule_status}</span>
-                          )}
-                          <span className="badge badge-primary">{s.case_number}</span>
-                        </span>
-                      </div>
-
-                      <div style={{ fontWeight: 700, fontSize: "14px", color: "var(--text-main)" }}>
-                        {s.patient_name}
-                      </div>
-                      <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                        {s.planned_procedure_summary || "Procedure"}
-                      </div>
-
-                      {/* Timestamps & Actions */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid var(--border-subtle)", paddingTop: "8px", marginTop: "4px" }}>
-                        <button
-                          onClick={() => openTimestampModal(s)}
-                          className="glass-btn glass-btn-secondary"
-                          style={{ fontSize: "11px", padding: "4px 8px" }}
-                        >
-                          <Clock size={12} />
-                          <span>OR events</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (s.patient_id && s.case_id) {
-                              setSelectedPatientId(s.patient_id);
-                              setSelectedCaseId(s.case_id);
-                              setView("intraor");
-                            }
-                          }}
-                          className="glass-btn glass-btn-primary"
-                          style={{ fontSize: "11px", padding: "4px 8px" }}
-                        >
-                          <Play size={12} />
-                          <span>Intra-OR</span>
-                        </button>
-                      </div>
-                      {s.case_status && (
-                        <CaseActions
-                          caseId={s.case_id} status={s.case_status as CaseStatus}
-                          caseLabel={`${s.case_number} - ${s.patient_name}`} onDone={loadData}
-                        />
-                      )}
-                    </div>
-                  ))}
-
-                  {roomSchedules.length === 0 && (
-                    <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-muted)", fontSize: "13px" }}>
-                      No procedures scheduled for this room today.
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+      {/* Schedule table */}
+      {rooms.length === 0 ? (
+        <div className="glass-card" style={{ padding: "48px 24px", textAlign: "center" }}>
+          <AlertTriangle size={36} color="var(--warning)" style={{ margin: "0 auto 12px auto" }} />
+          <h3 style={{ fontSize: "16px", fontWeight: 700, marginBottom: "6px" }}>No Operating Rooms Configured</h3>
+          <p style={{ fontSize: "13px", color: "var(--text-muted)", maxWidth: "420px", margin: "0 auto 16px auto" }}>
+            The schedule board requires active operating rooms to assign cases and check conflicts.
+          </p>
+          <button onClick={() => setView("settings")} className="glass-btn glass-btn-primary">
+            Configure Rooms in Settings
+          </button>
         </div>
-        )}
-      </div>
+      ) : (
+        <DataTable<ScheduleItem>
+          caption="Schedule for the selected date"
+          rows={schedules}
+          rowKey={(s) => s.schedule_id}
+          searchText={(s) => [s.patient_name, s.case_number, s.planned_procedure_summary, s.room_name, s.scheduled_start].filter(Boolean).join(" ")}
+          searchLabel="Search schedule"
+          searchPlaceholder="Search patient, case, procedure or room"
+          emptyMessage="No cases scheduled for this date."
+          columns={[
+            { key: "time", header: "Time", nowrap: true, render: (s) => (
+              <span style={{ fontWeight: 700, color: "var(--primary)" }}>
+                {s.scheduled_start} - {s.scheduled_end}
+                <span style={{ display: "block", fontSize: "11px", color: "var(--text-muted)", fontWeight: 500 }}>{s.estimated_duration_minutes} min</span>
+              </span>
+            ) },
+            { key: "room", header: "Room", nowrap: true, render: (s) => s.room_name || "Unassigned" },
+            { key: "case", header: "Case", nowrap: true, render: (s) => <span className="badge badge-primary">{s.case_number}</span> },
+            { key: "patient", header: "Patient", render: (s) => <strong>{s.patient_name}</strong> },
+            { key: "procedure", header: "Procedure", render: (s) => s.planned_procedure_summary || "Procedure" },
+            { key: "status", header: "Status", nowrap: true, render: (s) => (
+              (s.schedule_status === "CANCELLED" || s.schedule_status === "POSTPONED")
+                ? <span className="badge badge-danger">{s.schedule_status}</span>
+                : <span style={{ color: "var(--text-muted)" }}>{s.case_status || s.schedule_status}</span>
+            ) },
+            { key: "actions", header: "Actions", render: (s) => (
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: 200 }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  <button onClick={() => openTimestampModal(s)} className="glass-btn glass-btn-secondary" style={{ fontSize: "11px", padding: "4px 8px" }}>
+                    <Clock size={12} /><span>OR events</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (s.patient_id && s.case_id) {
+                        setSelectedPatientId(s.patient_id);
+                        setSelectedCaseId(s.case_id);
+                        setView("intraor");
+                      }
+                    }}
+                    className="glass-btn glass-btn-primary"
+                    style={{ fontSize: "11px", padding: "4px 8px" }}
+                  >
+                    <Play size={12} /><span>Intra-OR</span>
+                  </button>
+                </div>
+                {s.case_status && (
+                  <CaseActions caseId={s.case_id} status={s.case_status as CaseStatus}
+                    caseLabel={`${s.case_number} - ${s.patient_name}`} onDone={loadData} />
+                )}
+              </div>
+            ) },
+          ]}
+        />
+      )}
 
       {/* Modal: Schedule Case */}
       {scheduleModalOpen && (
