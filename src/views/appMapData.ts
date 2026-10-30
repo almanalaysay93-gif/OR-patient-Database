@@ -119,7 +119,8 @@ export const MAP_NODES: MapNode[] = [
     id: "patients", kind: "clinical", row: 2, col: 1, title: "Patients", sub: "registry + patient record", view: "patients",
     about: "Register, edit and archive patients. The patient record has tabs: Surgical Cases, Admissions, Labs & Files, Audit Trail.",
     buttons: [
-      ["Register New Patient", "Opens the form. Save Patient Record creates the patient."],
+      ["Register New Patient", "Opens the form, including Patient's data (dialysis, access, donor and more). Save Patient Record creates the patient."],
+      ["Save patient's data", "On the patient record. Updates the same data shown in Pre-OR. Queues the patient's cases for the Google Sheet."],
       ["Archived patients", "Lists archived patients. Restore brings one back."],
       ["Edit details", "Edits demographics. Save changes writes them."],
       ["Archive patient", "Hides the patient. A reason is required."],
@@ -135,14 +136,13 @@ export const MAP_NODES: MapNode[] = [
   },
   {
     id: "preor", kind: "clinical", row: 2, col: 2, title: "Pre-OR", sub: "checklist + readiness", view: "preor",
-    about: "Searchable, paged table of cases before surgery. Opening a row shows its checklist, pre-op baseline and safety phases.",
+    about: "Searchable, paged table of cases before surgery. Opening a row shows its checklist and the patient's data.",
     buttons: [
       ["Stage filter", "Not Started, Incomplete / Blocked, Ready for OR, Scheduled. Counts in brackets."],
       ["Previous / Next page", "Pages the table."],
       ["Click a row", "Opens that case's checklist."],
       ["Checklist status", "Sets each item. Readiness is recalculated, and N/A items do not lower it."],
-      ["Save baseline", "Saves dialysis type, access, years on dialysis and donor relation. Queues the case for the Google Sheet."],
-      ["Save note", "Saves a note on a safety phase item."],
+      ["Save patient's data", "Saves the patient's measurements, ASA, dialysis type, access, years on dialysis and donor. Queues every case of the patient for the Google Sheet."],
       ["Move stage", "Moves the case to another stage by hand. Reason required."],
       ["Postpone", "Postpones a case not yet in the OR. Reason required."],
       ["Cancel case", "Cancels the case. Reason required."],
@@ -232,7 +232,7 @@ export const MAP_NODES: MapNode[] = [
   {
     id: "queue", kind: "data", row: 4, col: 3, title: "Sheet send queue", sub: "timeout + retry wait",
     about: "Cases waiting to go to the Sheet. One send at a time, 30 s timeout, and failures wait 30 s doubling to 15 min. Send now skips the wait.",
-    buttons: [["(automatic)", "Filled by baseline, intra-op, post-op and completion saves."]],
+    buttons: [["(automatic)", "Filled by patient's data, intra-op, post-op and completion saves."]],
   },
   {
     id: "sheet", kind: "outside", row: 4, col: 4, title: "Google Sheet", sub: "Apps Script + token",
@@ -275,7 +275,8 @@ export const MAP_EDGES: MapEdge[] = [
   { from: "settings", to: "db", label: "save" },
   { from: "db", to: "audit", label: "every change" },
   { from: "db", to: "analytics", label: "read" },
-  { from: "preor", to: "queue", label: "Save baseline" },
+  { from: "preor", to: "queue", label: "Save patient's data" },
+  { from: "patients", to: "queue", label: "Save patient's data" },
   { from: "intraor", to: "queue", label: "Save record" },
   { from: "postor", to: "queue", label: "Save / Complete" },
   { from: "settings", to: "queue", label: "Send now" },
@@ -286,8 +287,8 @@ export const MAP_EDGES: MapEdge[] = [
 ];
 
 export const JOURNEY_STEPS: [string, string][] = [
-  ["Patients", "Register New Patient, then Schedule New Case. The case starts at Pre-OR."],
-  ["Pre-OR", "Work the checklist and Save baseline. The case shows Ready for OR when required items are done."],
+  ["Patients", "Register New Patient with the patient's data, then Schedule New Case. The case starts at Pre-OR."],
+  ["Pre-OR", "Work the checklist. The case shows Ready for OR when required items are done."],
   ["OR Schedule", "Schedule Case, then Confirm Schedule. Record OR events on the day."],
   ["Intra-OR", "Save Intra-OR Record and implants. Advance to Post-OR."],
   ["Post-OR / PACU", "Save Post-OR Record, add complications, then Mark Case Completed."],

@@ -4,7 +4,7 @@ import { useApp } from "../../context/AppContext";
 import {
   addDonorRelationshipType, getDonorRelationshipTypes, setDonorRelationshipTypeActive, type DonorRelationshipType,
 } from "../../services/donorRelationships";
-import type { DonorRelation } from "../../services/preopBaseline";
+import type { DonorRelation } from "../../services/patientData";
 
 const GROUPS: { value: DonorRelation; label: string }[] = [
   { value: "RELATED", label: "Related donor" },

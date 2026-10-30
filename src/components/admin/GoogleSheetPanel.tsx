@@ -64,7 +64,7 @@ export const GoogleSheetPanel: React.FC = () => {
         Google Sheet Sync
       </h2>
       <p style={{ fontSize: "13px", margin: 0 }}>
-        Each saved pre-op baseline sends the patient name, HRN, case number, dialysis and donor details to the Google Sheet.
+        Each save of patient's data sends the patient name, HRN, case number, dialysis and donor details to the Google Sheet.
         These rows identify the patient. Share the Sheet only with staff who may see them.
         Saves made offline wait here and go out at the next save or sign-in.
       </p>

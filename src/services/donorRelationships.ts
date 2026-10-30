@@ -2,7 +2,7 @@ import type { Db } from "../data/db";
 import { uuid, nowIso } from "../data/db";
 import { logAudit } from "./audit";
 import { requirePermission, requireSession } from "./session";
-import type { DonorRelation } from "./preopBaseline";
+import type { DonorRelation } from "./patientData";
 
 export interface DonorRelationshipType {
   relationship_type_id: string;

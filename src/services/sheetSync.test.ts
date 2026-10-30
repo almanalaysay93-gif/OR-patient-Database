@@ -6,8 +6,8 @@ import { runMigrations } from "../data/migrations";
 import type { Db } from "../data/db";
 import { ADMIN_SESSION } from "../test/setup";
 import { setActiveSession } from "./session";
-import { createAdmission, createPatient, createSurgicalCase } from "./patients";
-import { savePreopBaseline } from "./preopBaseline";
+import { createAdmission, createPatient, createSurgicalCase, getCaseById } from "./patients";
+import { savePatientData, type PatientDataInput } from "./patientData";
 import { completeCase, savePostOrRecord, saveIntraOrRecord } from "./intraPostOr";
 import {
   flushSheetSync, getSheetSyncConfig, getSheetSyncStatus, queueAllForSheet, retryDelayMs, saveSheetSyncConfig,
@@ -23,13 +23,24 @@ beforeEach(async () => {
   await runMigrations(db);
 });
 
+/** Saves patient's data for the patient of a case, with every field not given left empty. */
+async function savePatientDataForCase(db: Db, { caseId, ...fields }: { caseId: string } & Partial<PatientDataInput>) {
+  const found = await getCaseById(db, caseId);
+  return savePatientData(db, found!.patient_id, {
+    height_cm: null, weight_kg: null, measured_at: null, asa_classification: null, tobacco_status: null,
+    functional_status: null, dialysis_modality: null, dialysis_access: null, dialysis_years: null,
+    donor_relation: null, donor_relationship_type_id: null, notes: null, ...fields,
+  });
+}
+
+
 async function caseWithBaseline(hrn = "HRN-1") {
   const patient = await createPatient(db, { firstName: "Ana", lastName: "Cruz", hrn, dateOfBirth: "1980-05-10", sex: "FEMALE" });
   const admission = await createAdmission(db, { patientId: patient.patient_id, admissionDate: "2026-10-07" });
   const c = await createSurgicalCase(db, {
     patientId: patient.patient_id, admissionId: admission.admission_id, plannedProcedureSummary: "Kidney transplant",
   });
-  await savePreopBaseline(db, {
+  await savePatientDataForCase(db, {
     caseId: c.case_id, height_cm: null, weight_kg: null, measured_at: null, asa_classification: null,
     tobacco_status: null, functional_status: null, notes: "PRIVATE-NOTE",
     dialysis_modality: "HEMODIALYSIS", dialysis_access: "AV_FISTULA", dialysis_years: 2.5,

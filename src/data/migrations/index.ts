@@ -21,6 +21,7 @@ import { M018_DONOR_RELATIONSHIP_TYPES } from "./018_donor_relationship_types";
 import { M019_SHEET_SYNC } from "./019_sheet_sync";
 import { M020_REVOKE_PUBLIC_ADMIN_PASSWORD } from "./020_revoke_public_admin_password";
 import { M021_STAFF_SAVED_PASSWORDS } from "./021_staff_saved_passwords";
+import { M022_PATIENT_DATA } from "./022_patient_data";
 
 export interface Migration {
   version: number;
@@ -51,6 +52,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 19, name: "sheet_sync", sql: M019_SHEET_SYNC },
   { version: 20, name: "revoke_public_admin_password", sql: M020_REVOKE_PUBLIC_ADMIN_PASSWORD },
   { version: 21, name: "staff_saved_passwords", sql: M021_STAFF_SAVED_PASSWORDS },
+  { version: 22, name: "patient_data", sql: M022_PATIENT_DATA },
 ];
 
 export interface MigrationResult {

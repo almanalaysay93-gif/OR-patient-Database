@@ -35,6 +35,10 @@ import { CaseCodingPanel } from "../components/clinical/CaseCodingPanel";
 import { EditPatientDialog } from "../components/clinical/EditPatientDialog";
 import { CaseActions } from "../components/clinical/CaseActions";
 import { LaboratoryPanel } from "../components/clinical/LaboratoryPanel";
+import {
+  EMPTY_PATIENT_DATA, PatientDataFields, PatientDataPanel, toPatientDataInput, type PatientDataForm,
+} from "../components/clinical/PatientDataPanel";
+import { hasPatientData, savePatientData, validatePatientData } from "../services/patientData";
 import { archivePatient, listArchivedPatients, restorePatient, type ArchivedPatient } from "../services/patientArchive";
 import { logCatch, logError } from "../services/logger";
 
@@ -77,6 +81,7 @@ export const PatientsView: React.FC = () => {
   const [dob, setDob] = useState("");
   const [sex, setSex] = useState<"MALE" | "FEMALE" | "OTHER" | "UNKNOWN" | "">("");
   const [bloodType, setBloodType] = useState("");
+  const [newPatientData, setNewPatientData] = useState<PatientDataForm>(EMPTY_PATIENT_DATA);
   const [contact, setContact] = useState("");
   const [address, setAddress] = useState("");
   const [emergencyName, setEmergencyName] = useState("");
@@ -250,6 +255,9 @@ export const PatientsView: React.FC = () => {
     }
 
     try {
+      // Check the patient's data first, so a bad entry stops registration before the patient is created.
+      const patientData = toPatientDataInput(newPatientData);
+      await validatePatientData(db, patientData);
       const p = await createPatient(db, {
         firstName: fn,
         lastName: ln,
@@ -272,6 +280,8 @@ export const PatientsView: React.FC = () => {
         ward: "Surgical Inpatient",
       });
 
+      if (hasPatientData(patientData)) await savePatientData(db, p.patient_id, patientData);
+
       notify(`Patient ${p.full_name} registered!`, "success");
       setCreatePatientOpen(false);
       setFn("");
@@ -286,6 +296,7 @@ export const PatientsView: React.FC = () => {
       setDob("");
       setSex("");
       setBloodType("");
+      setNewPatientData(EMPTY_PATIENT_DATA);
       await loadList();
       setSelectedPatientId(p.patient_id);
     } catch (err) {
@@ -550,6 +561,8 @@ export const PatientsView: React.FC = () => {
               </button>
             </div>
 
+            {selectedPatientId && <PatientDataPanel patientId={selectedPatientId} />}
+
             {/* Profile Tabs */}
             <div style={{ display: "flex", gap: "8px", borderBottom: "1px solid var(--border-glass)", paddingBottom: "10px" }}>
               <button
@@ -800,7 +813,7 @@ export const PatientsView: React.FC = () => {
       {/* Modal: Create Patient */}
       {createPatientOpen && (
         <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-          <div className="glass-card" style={{ width: "100%", maxWidth: "580px", maxHeight: "90vh", overflowY: "auto", padding: "28px" }}>
+          <div className="glass-card" style={{ width: "100%", maxWidth: "680px", maxHeight: "90vh", overflowY: "auto", padding: "28px" }}>
             <h2 style={{ fontSize: "18px", fontWeight: 800, marginBottom: "16px" }}>Register Patient</h2>
             <form onSubmit={handleCreatePatient} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
@@ -880,6 +893,10 @@ export const PatientsView: React.FC = () => {
                     <input className="glass-input" placeholder="Spouse, Parent..." value={emergencyRel} onChange={(e) => setEmergencyRel(e.target.value)} />
                   </div>
                 </div>
+              </div>
+              <div style={{ borderTop: "1px solid var(--border-glass)", paddingTop: "12px" }}>
+                <h3 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "10px" }}>Patient's data</h3>
+                <PatientDataFields value={newPatientData} onChange={setNewPatientData} idPrefix="register-pd" />
               </div>
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "10px" }}>
                 <button type="button" onClick={() => setCreatePatientOpen(false)} className="glass-btn glass-btn-secondary">

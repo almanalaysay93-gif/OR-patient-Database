@@ -14,7 +14,7 @@ import {
   createAdmission, createPatient, createSurgicalCase, getCaseById, getPatientById, listPatients, searchGlobal,
 } from "./patients";
 import { getPreOrChecklist, updateChecklistItem } from "./preOr";
-import { getPreopBaseline, savePreopBaseline } from "./preopBaseline";
+import { getPatientData, savePatientData, type PatientDataInput } from "./patientData";
 import { addDonorRelationshipType, getDonorRelationshipTypes, setDonorRelationshipTypeActive } from "./donorRelationships";
 import { getSafetyItems, phaseComplete, saveSafetyResponse } from "./safetyPhases";
 import { getCaseEvents, saveCaseEvent } from "./caseEvents";
@@ -40,6 +40,21 @@ beforeEach(async () => {
   db = await openMemoryDb();
   await runMigrations(db);
 });
+
+/** Saves patient's data for the patient of a case, with every field not given left empty. */
+async function savePatientDataForCase(db: Db, { caseId, ...fields }: { caseId: string } & Partial<PatientDataInput>) {
+  const found = await getCaseById(db, caseId);
+  return savePatientData(db, found!.patient_id, {
+    height_cm: null, weight_kg: null, measured_at: null, asa_classification: null, tobacco_status: null,
+    functional_status: null, dialysis_modality: null, dialysis_access: null, dialysis_years: null,
+    donor_relation: null, donor_relationship_type_id: null, notes: null, ...fields,
+  });
+}
+
+async function getPatientDataForCase(db: Db, caseId: string) {
+  const found = await getCaseById(db, caseId);
+  return getPatientData(db, found!.patient_id);
+}
 
 async function addStaff(username: string, roleId: string): Promise<UserSession> {
   await createUser(db, { username, fullName: `Staff ${username}`, roleId, password: STAFF_PASSWORD });
@@ -431,12 +446,12 @@ describe("F1-F5 clinical rules", () => {
       caseId: c.case_id, height_cm: 160, weight_kg: 60, measured_at: "2026-10-07", asa_classification: "II",
       tobacco_status: "NEVER" as const, functional_status: "INDEPENDENT" as const, notes: " fit ",
     };
-    await expect(savePreopBaseline(db, { ...base, height_cm: 300 })).rejects.toThrow("Height");
-    await expect(savePreopBaseline(db, { ...base, weight_kg: 0 })).rejects.toThrow("Weight");
-    await expect(savePreopBaseline(db, { ...base, measured_at: null })).rejects.toThrow("Measurement date");
-    await savePreopBaseline(db, base);
-    await savePreopBaseline(db, { ...base, weight_kg: 62 });
-    const saved = await getPreopBaseline(db, c.case_id);
+    await expect(savePatientDataForCase(db, { ...base, height_cm: 300 })).rejects.toThrow("Height");
+    await expect(savePatientDataForCase(db, { ...base, weight_kg: 0 })).rejects.toThrow("Weight");
+    await expect(savePatientDataForCase(db, { ...base, measured_at: null })).rejects.toThrow("Measurement date");
+    await savePatientDataForCase(db, base);
+    await savePatientDataForCase(db, { ...base, weight_kg: 62 });
+    const saved = await getPatientDataForCase(db, c.case_id);
     expect(saved).toMatchObject({ height_cm: 160, weight_kg: 62, notes: "fit", assessed_by: MASTER_ADMIN_ID });
   });
 
@@ -446,20 +461,20 @@ describe("F1-F5 clinical rules", () => {
       caseId: c.case_id, height_cm: null, weight_kg: null, measured_at: null, asa_classification: null,
       tobacco_status: null, functional_status: null, notes: null,
     };
-    await expect(savePreopBaseline(db, { ...base, dialysis_modality: "HEMODIALYSIS", dialysis_years: 61 }))
+    await expect(savePatientDataForCase(db, { ...base, dialysis_modality: "HEMODIALYSIS", dialysis_years: 61 }))
       .rejects.toThrow("Years on dialysis");
-    await expect(savePreopBaseline(db, { ...base, dialysis_modality: "HEMODIALYSIS", dialysis_years: -1 }))
+    await expect(savePatientDataForCase(db, { ...base, dialysis_modality: "HEMODIALYSIS", dialysis_years: -1 }))
       .rejects.toThrow("Years on dialysis");
-    await expect(savePreopBaseline(db, { ...base, dialysis_modality: "NONE", dialysis_access: "AV_FISTULA" }))
+    await expect(savePatientDataForCase(db, { ...base, dialysis_modality: "NONE", dialysis_access: "AV_FISTULA" }))
       .rejects.toThrow("dialysis type");
-    await savePreopBaseline(db, {
+    await savePatientDataForCase(db, {
       ...base, dialysis_modality: "HEMODIALYSIS", dialysis_access: "AV_FISTULA", dialysis_years: 3.5, donor_relation: "RELATED",
     });
-    expect(await getPreopBaseline(db, c.case_id)).toMatchObject({
+    expect(await getPatientDataForCase(db, c.case_id)).toMatchObject({
       dialysis_modality: "HEMODIALYSIS", dialysis_access: "AV_FISTULA", dialysis_years: 3.5, donor_relation: "RELATED",
     });
-    await savePreopBaseline(db, { ...base, dialysis_modality: "NONE", donor_relation: "NON_RELATED" });
-    expect(await getPreopBaseline(db, c.case_id)).toMatchObject({
+    await savePatientDataForCase(db, { ...base, dialysis_modality: "NONE", donor_relation: "NON_RELATED" });
+    expect(await getPatientDataForCase(db, c.case_id)).toMatchObject({
       dialysis_modality: "NONE", dialysis_access: null, dialysis_years: null, donor_relation: "NON_RELATED",
     });
   });
@@ -473,14 +488,14 @@ describe("F1-F5 clinical rules", () => {
     const types = await getDonorRelationshipTypes(db);
     expect(types.find((t) => t.relationship_type_id === "drt-sister")?.donor_relation).toBe("RELATED");
     expect(types.find((t) => t.relationship_type_id === "drt-spouse")?.donor_relation).toBe("NON_RELATED");
-    await expect(savePreopBaseline(db, { ...base, donor_relation: "NON_RELATED", donor_relationship_type_id: "drt-sister" }))
+    await expect(savePatientDataForCase(db, { ...base, donor_relation: "NON_RELATED", donor_relationship_type_id: "drt-sister" }))
       .rejects.toThrow("does not match");
-    await expect(savePreopBaseline(db, { ...base, donor_relationship_type_id: "drt-sister" }))
+    await expect(savePatientDataForCase(db, { ...base, donor_relationship_type_id: "drt-sister" }))
       .rejects.toThrow("before the type of relation");
-    await expect(savePreopBaseline(db, { ...base, donor_relation: "RELATED", donor_relationship_type_id: "missing" }))
+    await expect(savePatientDataForCase(db, { ...base, donor_relation: "RELATED", donor_relationship_type_id: "missing" }))
       .rejects.toThrow("not found");
-    await savePreopBaseline(db, { ...base, donor_relation: "RELATED", donor_relationship_type_id: "drt-sister" });
-    expect(await getPreopBaseline(db, c.case_id)).toMatchObject({ donor_relationship_type_id: "drt-sister" });
+    await savePatientDataForCase(db, { ...base, donor_relation: "RELATED", donor_relationship_type_id: "drt-sister" });
+    expect(await getPatientDataForCase(db, c.case_id)).toMatchObject({ donor_relationship_type_id: "drt-sister" });
 
     const id = await addDonorRelationshipType(db, " Step-sibling ", "RELATED");
     await expect(addDonorRelationshipType(db, "step-SIBLING", "RELATED")).rejects.toThrow("already exists");
@@ -743,7 +758,7 @@ describe("Excel export", () => {
     await addOrRoom(db, "OR 1");
     const room = (await getOrRooms(db))[0];
     await scheduleCase(db, { caseId: c.case_id, roomId: room.or_room_id, date: "2026-10-08", startTime: "08:00", estimatedDurationMinutes: 90 });
-    await savePreopBaseline(db, {
+    await savePatientDataForCase(db, {
       caseId: c.case_id, height_cm: 160, weight_kg: 60, measured_at: "2026-10-07", asa_classification: "II",
       tobacco_status: "NEVER", functional_status: "INDEPENDENT", notes: "PREOP-SECRET-NOTE",
     });

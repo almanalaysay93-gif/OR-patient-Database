@@ -6,7 +6,7 @@ import {
   getDelayReasons, getDiagnoses, getOrRooms, getPostOpDestinations, getProcedures, getSpecialties,
 } from "./masterData";
 import { getPreOrChecklist, updateChecklistItem } from "./preOr";
-import { savePreopBaseline } from "./preopBaseline";
+import { savePatientData } from "./patientData";
 import { scheduleCase, updateActualTimes } from "./scheduling";
 import { getSafetyItems, saveSafetyResponse } from "./safetyPhases";
 import { saveCaseEvent, type CaseEventType } from "./caseEvents";
@@ -140,6 +140,7 @@ export async function clearDemoData(db: Db): Promise<number> {
     `DELETE FROM safety_responses WHERE case_id IN ${cases}`,
     `DELETE FROM case_safety_templates WHERE case_id IN ${cases}`,
     `DELETE FROM case_preop_baseline WHERE case_id IN ${cases}`,
+    `DELETE FROM patient_data WHERE patient_id IN ${patients}`,
     `DELETE FROM case_events WHERE case_id IN ${cases}`,
     `DELETE FROM pre_or_checklist_values WHERE case_id IN ${cases}`,
     `DELETE FROM pre_or_assessments WHERE case_id IN ${cases}`,
@@ -264,14 +265,15 @@ export async function seedDemoData(db: Db, onProgress?: (done: number, total: nu
 
     // Pre-op: every stage except a brand-new case has a baseline and checklist work.
     if (stage !== "PRE_OR") {
-      await savePreopBaseline(db, {
-        caseId,
+      await savePatientData(db, patient.patient_id, {
         height_cm: 150 + (i % 35),
         weight_kg: 48 + (i % 50),
         measured_at: admissionDate,
         asa_classification: ASA[i % ASA.length],
         tobacco_status: (["NEVER", "FORMER", "CURRENT", "UNKNOWN"] as const)[i % 4],
         functional_status: i % 11 === 0 ? "PARTIALLY_DEPENDENT" : "INDEPENDENT",
+        dialysis_modality: null, dialysis_access: null, dialysis_years: null,
+        donor_relation: null, donor_relationship_type_id: null,
         notes: "Simulated baseline.",
       });
       const { items } = await getPreOrChecklist(db, caseId);

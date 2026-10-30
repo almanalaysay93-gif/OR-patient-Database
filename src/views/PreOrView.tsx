@@ -9,8 +9,7 @@ import {
   type ChecklistItemValue,
   type ReadinessCalculation,
 } from "../services/preOr";
-import { PreopBaselinePanel } from "../components/clinical/PreopBaselinePanel";
-import { SafetyPhasesPanel } from "../components/clinical/SafetyPhasesPanel";
+import { PatientDataPanel } from "../components/clinical/PatientDataPanel";
 import { filterBoardRows, pageBoardRows } from "../services/preOrBoardTable";
 import type { CaseStatus } from "../services/patients";
 import { logError } from "../services/logger";
@@ -89,6 +88,7 @@ export const PreOrView: React.FC = () => {
   const stageCount = (value: CaseStatus | null) =>
     value ? boardCases.filter((c) => c.case_status === value).length : boardCases.length;
   const matches = filterBoardRows(boardCases, query, stage);
+  const selectedCasePatientId: string | undefined = boardCases.find((b) => b.case_id === selectedCaseId)?.patient_id;
   const pageData = pageBoardRows(matches, page);
   const readinessClass = (p: number) => (p >= 100 ? "badge-success" : p > 50 ? "badge-warning" : "badge-danger");
 
@@ -337,8 +337,7 @@ export const PreOrView: React.FC = () => {
               ))}
             </div>
 
-            {selectedCaseId && <PreopBaselinePanel caseId={selectedCaseId} />}
-            {selectedCaseId && <SafetyPhasesPanel caseId={selectedCaseId} />}
+            {selectedCasePatientId && <PatientDataPanel patientId={selectedCasePatientId} />}
 
             <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid var(--border-glass)", paddingTop: "16px" }}>
               <button

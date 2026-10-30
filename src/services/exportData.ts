@@ -183,7 +183,7 @@ export async function buildClinicalExport(db: Db, opts: ExportOptions): Promise<
      JOIN patients p ON p.patient_id = c.patient_id
      LEFT JOIN admissions a ON a.admission_id = c.admission_id
      LEFT JOIN specialties sp ON sp.specialty_id = c.specialty_id
-     LEFT JOIN case_preop_baseline b ON b.case_id = c.case_id
+     LEFT JOIN patient_data b ON b.patient_id = c.patient_id
      LEFT JOIN donor_relationship_types drt ON drt.relationship_type_id = b.donor_relationship_type_id
      LEFT JOIN pre_or_assessments pa ON pa.case_id = c.case_id
      LEFT JOIN or_schedule s ON s.case_id = c.case_id

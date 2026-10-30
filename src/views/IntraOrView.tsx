@@ -80,11 +80,11 @@ export const IntraOrView: React.FC = () => {
         // Always reset, so a case with no record yet never shows the previous case's values.
         setAnesthesiaTypeId(intra?.anesthesia_type_id || "");
 
-        // Synchronize ASA from pre-op baseline if not yet recorded in intra-op
+        // Synchronize ASA from the patient's data if not yet recorded in intra-op
         let resolvedAsa = intra?.asa_classification || "";
         if (!resolvedAsa) {
           const preopRows = await db.select<{ asa_classification: string | null }>(
-            "SELECT asa_classification FROM case_preop_baseline WHERE case_id = ?",
+            "SELECT pd.asa_classification FROM patient_data pd JOIN surgical_cases c ON c.patient_id = pd.patient_id WHERE c.case_id = ?",
             [selectedCaseId]
           );
           if (preopRows[0]?.asa_classification) {

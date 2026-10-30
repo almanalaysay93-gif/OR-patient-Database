@@ -155,14 +155,15 @@ export async function queueSheetSync(tx: RawDb, caseId: string): Promise<void> {
     [caseId, nowIso()]);
 }
 
-/** Queue every case that has any pre-op, intra-op or post-op record, for the first fill of a new Sheet. */
+/** Queue every case that has any patient's data, intra-op or post-op record, for the first fill of a new Sheet. */
 export async function queueAllForSheet(db: Db): Promise<number> {
   const userId = requirePermission("export.identifiable");
   if (!(await readSetting(db, URL_KEY))) throw new Error("Save the Google Sheet address first.");
   const now = nowIso();
   return db.transaction(async (tx) => {
     const ids = await tx.select<{ case_id: string }>(
-      `SELECT case_id FROM case_preop_baseline UNION SELECT case_id FROM intra_or_records
+      `SELECT c.case_id FROM surgical_cases c JOIN patient_data pd ON pd.patient_id = c.patient_id
+       UNION SELECT case_id FROM intra_or_records
        UNION SELECT case_id FROM post_or_records`);
     for (const { case_id } of ids) {
       await tx.execute(
@@ -198,7 +199,7 @@ async function buildRows(db: Db, caseIds: string[]): Promise<SheetRow[]> {
        po.pain_score, po.complications_present, po.icu_required, po.reoperation_required, po.mortality
      FROM surgical_cases c
      JOIN patients p ON p.patient_id = c.patient_id
-     LEFT JOIN case_preop_baseline b ON b.case_id = c.case_id
+     LEFT JOIN patient_data b ON b.patient_id = c.patient_id
      LEFT JOIN donor_relationship_types drt ON drt.relationship_type_id = b.donor_relationship_type_id
      LEFT JOIN users u ON u.user_id = b.assessed_by
      LEFT JOIN intra_or_records i ON i.case_id = c.case_id
@@ -210,7 +211,7 @@ async function buildRows(db: Db, caseIds: string[]): Promise<SheetRow[]> {
 
 /**
  * Send queued cases. Any signed-in user may trigger it: the administrator chose
- * the destination, and the person saving a baseline should not need export rights.
+ * the destination, and the person saving patient's data should not need export rights.
  * A call made while a send runs waits for it and then sends what is still queued,
  * so only one request is open at a time.
  */
