@@ -4,6 +4,7 @@ import { logAudit } from "./audit";
 import { requirePermission } from "./session";
 import { getCaseById } from "./patients";
 import { createFollowupIfDue } from "./followup";
+import { queueSheetSync } from "./sheetSync";
 
 export interface IntraOrRecord {
   intra_or_id: string;
@@ -159,6 +160,7 @@ export async function saveIntraOrRecord(
       );
     }
 
+    await queueSheetSync(tx, params.caseId);
     await logAudit(tx, {
       userId: params.userId,
       patientId: c.patient_id,
@@ -263,6 +265,7 @@ export async function savePostOrRecord(
       );
     }
 
+    await queueSheetSync(tx, params.caseId);
     await logAudit(tx, {
       userId: params.userId,
       patientId: c.patient_id,
@@ -359,6 +362,7 @@ export async function completeCase(
 
   const now = nowIso();
   await db.transaction(async (tx) => {
+    await queueSheetSync(tx, caseId);
     await tx.execute(
       "UPDATE surgical_cases SET case_status = 'COMPLETED', updated_by = ?, updated_at = ? WHERE case_id = ?",
       [userId || null, now, caseId]

@@ -33,6 +33,25 @@ export interface SheetRow {
   type_of_relation: string | null;
   assessed_by: string | null;
   assessed_at: string | null;
+  case_status: string | null;
+  anesthesia_type: string | null;
+  intra_asa: string | null;
+  estimated_blood_loss_ml: number | null;
+  blood_transfusion: number | null;
+  units_transfused: number | null;
+  specimen_collected: number | null;
+  implant_used: number | null;
+  procedure_start: string | null;
+  procedure_end: string | null;
+  post_op_destination: string | null;
+  pacu_admission: string | null;
+  pacu_discharge: string | null;
+  post_op_status: string | null;
+  pain_score: number | null;
+  complications_present: number | null;
+  icu_required: number | null;
+  reoperation_required: number | null;
+  mortality: number | null;
 }
 
 export interface SyncResult {
@@ -80,7 +99,10 @@ export async function saveSheetSyncConfig(db: Db, params: { url: string; token: 
   });
 }
 
-/** Called inside the baseline save transaction, so the queue entry and the save commit together. */
+/**
+ * Called inside each clinical save transaction (pre-op, intra-op, post-op, case completion),
+ * so the queue entry and the save commit together.
+ */
 export async function queueSheetSync(tx: RawDb, caseId: string): Promise<void> {
   if (!(await readSetting(tx, URL_KEY))) return;
   await tx.execute(
@@ -89,18 +111,22 @@ export async function queueSheetSync(tx: RawDb, caseId: string): Promise<void> {
     [caseId, nowIso()]);
 }
 
-/** Queue every case that has a baseline, for the first fill of a new Sheet. */
+/** Queue every case that has any pre-op, intra-op or post-op record, for the first fill of a new Sheet. */
 export async function queueAllForSheet(db: Db): Promise<number> {
   const userId = requirePermission("export.identifiable");
   if (!(await readSetting(db, URL_KEY))) throw new Error("Save the Google Sheet address first.");
   const now = nowIso();
   return db.transaction(async (tx) => {
-    const r = await tx.execute(
-      `INSERT INTO sheet_sync_pending (case_id, queued_at, attempts, last_error)
-       SELECT case_id, ?, 0, NULL FROM case_preop_baseline WHERE true
-       ON CONFLICT(case_id) DO UPDATE SET queued_at = excluded.queued_at`, [now]);
-    await logAudit(tx, { userId, action: "QUEUE_ALL_SHEET_SYNC", entityType: "APP_SETTINGS", newValue: String(r.changes) });
-    return r.changes;
+    const ids = await tx.select<{ case_id: string }>(
+      `SELECT case_id FROM case_preop_baseline UNION SELECT case_id FROM intra_or_records
+       UNION SELECT case_id FROM post_or_records`);
+    for (const { case_id } of ids) {
+      await tx.execute(
+        `INSERT INTO sheet_sync_pending (case_id, queued_at, attempts, last_error) VALUES (?, ?, 0, NULL)
+         ON CONFLICT(case_id) DO UPDATE SET queued_at = excluded.queued_at`, [case_id, now]);
+    }
+    await logAudit(tx, { userId, action: "QUEUE_ALL_SHEET_SYNC", entityType: "APP_SETTINGS", newValue: String(ids.length) });
+    return ids.length;
   });
 }
 
@@ -119,13 +145,23 @@ async function buildRows(db: Db, caseIds: string[]): Promise<SheetRow[]> {
        c.planned_procedure_summary AS planned_procedure,
        b.dialysis_modality AS dialysis, b.dialysis_access, b.dialysis_years AS years_on_dialysis,
        b.donor_relation AS donor, drt.name AS type_of_relation,
-       u.full_name AS assessed_by, b.assessed_at
-     FROM case_preop_baseline b
-     JOIN surgical_cases c ON c.case_id = b.case_id
+       u.full_name AS assessed_by, b.assessed_at,
+       c.case_status,
+       an.name AS anesthesia_type, i.asa_classification AS intra_asa, i.estimated_blood_loss_ml,
+       i.blood_transfusion, i.units_transfused, i.specimen_collected, i.implant_used,
+       i.procedure_start, i.procedure_end,
+       d.name AS post_op_destination, po.pacu_admission, po.pacu_discharge, po.post_op_status,
+       po.pain_score, po.complications_present, po.icu_required, po.reoperation_required, po.mortality
+     FROM surgical_cases c
      JOIN patients p ON p.patient_id = c.patient_id
+     LEFT JOIN case_preop_baseline b ON b.case_id = c.case_id
      LEFT JOIN donor_relationship_types drt ON drt.relationship_type_id = b.donor_relationship_type_id
      LEFT JOIN users u ON u.user_id = b.assessed_by
-     WHERE b.case_id IN (${marks})`, caseIds);
+     LEFT JOIN intra_or_records i ON i.case_id = c.case_id
+     LEFT JOIN anesthesia_types an ON an.anesthesia_type_id = i.anesthesia_type_id
+     LEFT JOIN post_or_records po ON po.case_id = c.case_id
+     LEFT JOIN post_op_destinations d ON d.destination_id = po.post_op_destination_id
+     WHERE c.case_id IN (${marks})`, caseIds);
 }
 
 /**

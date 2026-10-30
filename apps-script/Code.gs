@@ -24,6 +24,25 @@ var COLUMNS = [
   ['assessed_by', 'Assessed By'],
   ['assessed_at', 'Assessed At'],
   ['synced_at', 'Synced At'],
+  ['case_status', 'Case Status'],
+  ['anesthesia_type', 'Anesthesia Type'],
+  ['intra_asa', 'Intra-op ASA'],
+  ['estimated_blood_loss_ml', 'Blood Loss (mL)'],
+  ['blood_transfusion', 'Blood Transfusion'],
+  ['units_transfused', 'Units Transfused'],
+  ['specimen_collected', 'Specimen Collected'],
+  ['implant_used', 'Implant Used'],
+  ['procedure_start', 'Procedure Start'],
+  ['procedure_end', 'Procedure End'],
+  ['post_op_destination', 'Post-op Destination'],
+  ['pacu_admission', 'PACU Admission'],
+  ['pacu_discharge', 'PACU Discharge'],
+  ['post_op_status', 'Post-op Status'],
+  ['pain_score', 'Pain Score (0-10)'],
+  ['complications_present', 'Complications'],
+  ['icu_required', 'ICU Required'],
+  ['reoperation_required', 'Reoperation'],
+  ['mortality', 'Mortality'],
 ];
 var MAX_ROWS = 200;
 
@@ -59,13 +78,20 @@ function setup() {
   sheet_();
 }
 
+/** Numbers and times are plain values. Only text gets the formula guard. */
+function cell_(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'number' || typeof v === 'boolean') return v;
+  var s = String(v);
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
+}
+
+/** Writes the header on every call, so a newer column list replaces an older header. */
 function sheet_() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sh = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
-  if (sh.getLastRow() === 0) {
-    sh.getRange(1, 1, 1, COLUMNS.length).setValues([COLUMNS.map(function (c) { return c[1]; })]);
-    sh.setFrozenRows(1);
-  }
+  sh.getRange(1, 1, 1, COLUMNS.length).setValues([COLUMNS.map(function (c) { return c[1]; })]);
+  sh.setFrozenRows(1);
   return sh;
 }
 
@@ -87,17 +113,8 @@ function upsert_(rows) {
       at = sh.getLastRow() + 1;
       index[row.case_number] = at;
     }
-    var range = sh.getRange(at, 1, 1, COLUMNS.length);
-    range.setNumberFormat('@');
-    range.setValues([values]);
+    sh.getRange(at, 1, 1, COLUMNS.length).setValues([values]);
   });
-}
-
-/** Plain text only. A leading = + - @ would make Sheets run the value as a formula. */
-function cell_(v) {
-  if (v === null || v === undefined) return '';
-  var s = String(v);
-  return /^[=+\-@]/.test(s) ? "'" + s : s;
 }
 
 function sameText_(a, b) {

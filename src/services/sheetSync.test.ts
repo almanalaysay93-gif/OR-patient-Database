@@ -8,6 +8,7 @@ import { ADMIN_SESSION } from "../test/setup";
 import { setActiveSession } from "./session";
 import { createAdmission, createPatient, createSurgicalCase } from "./patients";
 import { savePreopBaseline } from "./preopBaseline";
+import { completeCase, savePostOrRecord, saveIntraOrRecord } from "./intraPostOr";
 import {
   flushSheetSync, getSheetSyncConfig, getSheetSyncStatus, queueAllForSheet, saveSheetSyncConfig, type Poster,
 } from "./sheetSync";
@@ -108,6 +109,45 @@ describe("Google Sheet sync", () => {
     expect(await queueAllForSheet(db)).toBe(2);
     expect((await getSheetSyncStatus(db)).pending).toBe(2);
   });
+
+  it("sends intra-op and post-op fields and queues each save of those records", async () => {
+    await saveSheetSyncConfig(db, { url: URL, token: TOKEN });
+    const c = await caseWithBaseline("HRN-9");
+    await flushSheetSync(db, recorder({ ok: true, status: 200, text: '{"ok":true}' }).post);
+
+    await saveIntraOrRecord(db, {
+      caseId: c.case_id, anesthesiaTypeId: "anes-1", asaClassification: "III", estimatedBloodLossMl: 350,
+      bloodTransfusion: true, unitsTransfused: 2, specimenCollected: true, implantUsed: false,
+      operativeFindings: "INTRA-SECRET",
+    });
+    expect((await getSheetSyncStatus(db)).pending).toBe(1);
+    await savePostOrRecord(db, {
+      caseId: c.case_id, postOpDestinationId: "dest-2", postOpStatus: "STABLE", painScore: 4,
+      complicationsPresent: false, icuRequired: true, reoperationRequired: false, mortality: false, notes: "POST-SECRET",
+    });
+    await completeCase(db, c.case_id);
+
+    const { calls, post } = recorder({ ok: true, status: 200, text: '{"ok":true}' });
+    expect((await flushSheetSync(db, post)).sent).toBe(1);
+    expect(calls[0].body.rows[0]).toMatchObject({
+      case_status: "COMPLETED", anesthesia_type: "General", intra_asa: "III", estimated_blood_loss_ml: 350,
+      blood_transfusion: 1, units_transfused: 2, specimen_collected: 1, implant_used: 0,
+      post_op_destination: "ICU", post_op_status: "STABLE", pain_score: 4, icu_required: 1,
+      complications_present: 0, reoperation_required: 0, mortality: 0,
+    });
+    const body = JSON.stringify(calls[0].body);
+    expect(body).not.toContain("INTRA-SECRET");
+    expect(body).not.toContain("POST-SECRET");
+  });
+
+  it("first fill includes a case that has only intra-op or post-op records", async () => {
+    const patient = await createPatient(db, { firstName: "Bo", lastName: "Reyes", hrn: "HRN-OP", dateOfBirth: "1970-01-01", sex: "MALE" });
+    const admission = await createAdmission(db, { patientId: patient.patient_id, admissionDate: "2026-10-07" });
+    const c = await createSurgicalCase(db, { patientId: patient.patient_id, admissionId: admission.admission_id, plannedProcedureSummary: "Appendectomy" });
+    await saveIntraOrRecord(db, { caseId: c.case_id, estimatedBloodLossMl: 20 });
+    await saveSheetSyncConfig(db, { url: URL, token: TOKEN });
+    expect(await queueAllForSheet(db)).toBe(1);
+  });
 });
 
 describe("Apps Script web app (apps-script/Code.gs)", () => {
@@ -119,7 +159,6 @@ describe("Apps Script web app (apps-script/Code.gs)", () => {
       getRange: (row: number, col: number, rows: number, cols: number) => ({
         setValues: (v: string[][]) => v.forEach((line, i) => { grid[row - 1 + i] = line.slice(0, cols); }),
         getValues: () => grid.slice(row - 1, row - 1 + rows).map((l) => l.slice(col - 1, col - 1 + cols)),
-        setNumberFormat: () => {},
       }),
     };
     return { grid, sheet };
