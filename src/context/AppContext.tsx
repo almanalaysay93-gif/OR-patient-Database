@@ -7,6 +7,7 @@ import type { UserSession } from "../services/auth";
 import { getIdleLockMinutes, login as signIn, unlockSession, recordSessionEvent } from "../services/auth";
 import { changeOwnPassword } from "../services/userAdmin";
 import { hasPermission, setActiveSession } from "../services/session";
+import { flushSheetSync } from "../services/sheetSync";
 import { runScheduledBackup } from "../services/backup";
 
 export type NavView =
@@ -183,7 +184,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const onLoginSuccess = (s: UserSession) => {
     startSession(s);
     setCurrentView((view) => (canOpenView(s, view) ? view : VIEW_ORDER.find((v) => canOpenView(s, v)) ?? "settings"));
-    if (!s.mustChangePassword) notify(`Signed in as ${s.fullName} (${s.roleName})`, "success");
+    if (!s.mustChangePassword) {
+      notify(`Signed in as ${s.fullName} (${s.roleName})`, "success");
+      // Send baselines that were saved while the workstation was offline.
+      if (db) flushSheetSync(db).catch(console.error);
+    }
   };
 
   const login = async (username: string, password: string) => {

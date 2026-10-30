@@ -3,6 +3,7 @@ import { nowIso } from "../data/db";
 import { logAudit } from "./audit";
 import { requirePermission } from "./session";
 import { getCaseById } from "./patients";
+import { queueSheetSync } from "./sheetSync";
 
 export interface PreopBaseline {
   case_id: string;
@@ -81,6 +82,7 @@ export async function savePreopBaseline(
       [params.caseId, now, params.userId || null, params.height_cm, params.weight_kg, params.measured_at,
         params.asa_classification, params.tobacco_status, params.functional_status, modality, access, years, donor, relationshipType,
         params.notes?.trim() || null, now, now]);
+    await queueSheetSync(tx, params.caseId);
     await logAudit(tx, {
       userId: params.userId, patientId: c.patient_id, caseId: params.caseId,
       action: "SAVE_PREOP_BASELINE", entityType: "PRE_OR", recordId: params.caseId,

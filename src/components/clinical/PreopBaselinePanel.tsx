@@ -5,6 +5,7 @@ import {
   type DialysisAccess, type DialysisModality, type DonorRelation, type PreopBaseline,
 } from "../../services/preopBaseline";
 import { getDonorRelationshipTypes, type DonorRelationshipType } from "../../services/donorRelationships";
+import { flushSheetSync } from "../../services/sheetSync";
 
 const MODALITY_LABELS: Record<DialysisModality, string> = {
   NONE: "None (not on dialysis)", HEMODIALYSIS: "Hemodialysis", PERITONEAL_DIALYSIS: "Peritoneal dialysis", UNKNOWN: "Unknown",
@@ -70,6 +71,9 @@ export function PreopBaselinePanel({ caseId }: { caseId: string }) {
         donor_relationship_type_id: donor ? relationshipType || null : null, notes,
       });
       notify("Preoperative baseline saved.", "success");
+      flushSheetSync(db).then((r) => {
+        if (r.error) notify(`Saved on this workstation. Google Sheet not updated yet: ${r.error}`, "error");
+      }).catch((err) => notify((err as Error).message, "error"));
     } catch (err) {
       notify((err as Error).message, "error");
     }

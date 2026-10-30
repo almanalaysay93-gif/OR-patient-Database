@@ -11,6 +11,7 @@ import { ExportPanel } from "../components/admin/ExportPanel";
 import { DemoDataPanel } from "../components/admin/DemoDataPanel";
 import { AuditPanel } from "../components/admin/AuditPanel";
 import { DonorRelationshipPanel } from "../components/admin/DonorRelationshipPanel";
+import { GoogleSheetPanel } from "../components/admin/GoogleSheetPanel";
 
 export const SettingsView: React.FC = () => {
   const { db, session, can, theme, setTheme, visualEffects, setVisualEffects, notify } = useApp();
@@ -249,6 +250,7 @@ export const SettingsView: React.FC = () => {
         <DonorRelationshipPanel />
 
         {(can("export.deidentified") || can("export.identifiable")) && <ExportPanel />}
+        {can("export.identifiable") && <GoogleSheetPanel />}
         {can("users.manage") && <UsersPanel />}
         {(can("db.backup") || can("db.restore")) && <BackupPanel />}
         {can("audit.view") && <AuditPanel />}
