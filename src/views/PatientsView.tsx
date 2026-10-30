@@ -36,6 +36,7 @@ import { EditPatientDialog } from "../components/clinical/EditPatientDialog";
 import { CaseActions } from "../components/clinical/CaseActions";
 import { LaboratoryPanel } from "../components/clinical/LaboratoryPanel";
 import { archivePatient, listArchivedPatients, restorePatient, type ArchivedPatient } from "../services/patientArchive";
+import { logCatch, logError } from "../services/logger";
 
 export const PatientsView: React.FC = () => {
   const { db, can, selectedPatientId, setSelectedPatientId, setSelectedCaseId, setView, notify, openRegisterModal, setOpenRegisterModal } = useApp();
@@ -100,7 +101,7 @@ export const PatientsView: React.FC = () => {
       setPatients(res.patients);
       setTotal(res.total);
     } catch (err) {
-      console.error(err);
+      logError("PatientsView.load", err);
     } finally {
       setLoading(false);
     }
@@ -154,7 +155,7 @@ export const PatientsView: React.FC = () => {
 
   useEffect(() => {
     if (db) {
-      getSpecialties(db).then(setSpecialties).catch(console.error);
+      getSpecialties(db).then(setSpecialties).catch(logCatch("PatientsView.specialties"));
     }
   }, [db]);
 
@@ -171,7 +172,7 @@ export const PatientsView: React.FC = () => {
       const list = await listPatientAllergies(db, pid);
       setAllergies(list);
     } catch (err) {
-      console.error(err);
+      logError("PatientsView.loadDetail", err);
     }
   };
 
@@ -200,7 +201,7 @@ export const PatientsView: React.FC = () => {
         setAllergies(allergyList);
         if (admList.length > 0) setSelectedAdmId(admList[0].admission_id);
       } catch (err) {
-        console.error(err);
+        logError("PatientsView.save", err);
       }
     }
     loadPatientDetails();

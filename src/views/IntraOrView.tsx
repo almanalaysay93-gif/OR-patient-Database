@@ -22,6 +22,7 @@ import {
 } from "../services/implants";
 import { CaseEventsPanel } from "../components/clinical/CaseEventsPanel";
 import { SafetyPhasesPanel } from "../components/clinical/SafetyPhasesPanel";
+import { logError } from "../services/logger";
 
 export const IntraOrView: React.FC = () => {
   const { db, session, selectedCaseId, setView, notify } = useApp();
@@ -58,7 +59,7 @@ export const IntraOrView: React.FC = () => {
       const list = await listCaseImplants(db, cid);
       setImplants(list);
     } catch (err) {
-      console.error(err);
+      logError("IntraOrView.load", err);
     }
   };
 
@@ -100,7 +101,7 @@ export const IntraOrView: React.FC = () => {
         setFindings(intra?.operative_findings || "");
         setNotes(intra?.operative_notes || "");
       } catch (err) {
-        console.error(err);
+        logError("IntraOrView.save", err);
       }
     }
     load();

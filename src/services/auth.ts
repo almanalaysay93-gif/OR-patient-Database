@@ -102,7 +102,26 @@ export async function createInitialAdmin(
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MS = 60_000;
-const failures = new Map<string, { count: number; until: number }>();
+
+/**
+ * Failed sign-in counts live in app_settings, so a page reload or an app restart
+ * does not reset the lockout. Value format: "<count>:<lockedUntilEpochMs>".
+ */
+const failureKey = (key: string) => `login_failures:${key.slice(0, 80)}`;
+
+async function readFailures(db: Db, key: string): Promise<{ count: number; until: number } | undefined> {
+  const rows = await db.select<{ value: string | null }>("SELECT value FROM app_settings WHERE key = ?", [failureKey(key)]);
+  const [count, until] = (rows[0]?.value ?? "").split(":").map(Number);
+  return Number.isFinite(count) && count > 0 ? { count, until: Number.isFinite(until) ? until : 0 } : undefined;
+}
+
+async function writeFailures(db: Db, key: string, count: number, until: number): Promise<void> {
+  await db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)", [failureKey(key), `${count}:${until}`]);
+}
+
+async function clearFailures(db: Db, key: string): Promise<void> {
+  await db.execute("DELETE FROM app_settings WHERE key = ?", [failureKey(key)]);
+}
 
 async function loadSession(db: Db, user: UserRow): Promise<UserSession> {
   const perms = await db.select<{ permission_key: string }>(
@@ -133,7 +152,7 @@ async function findUser(db: Db, where: string, value: string): Promise<UserRow |
 
 export async function login(db: Db, username: string, plain: string, now: number = Date.now()): Promise<UserSession> {
   const key = username.trim().toLowerCase();
-  const failed = failures.get(key);
+  const failed = await readFailures(db, key);
   if (failed && failed.until > now) {
     throw new Error(`Too many failed attempts. Try again in ${Math.ceil((failed.until - now) / 1000)} seconds.`);
   }
@@ -144,14 +163,14 @@ export async function login(db: Db, username: string, plain: string, now: number
   if (!user || !valid) {
     const expired = !!failed && failed.count >= MAX_FAILED_ATTEMPTS;
     const count = (expired ? 0 : failed?.count ?? 0) + 1;
-    failures.set(key, { count, until: count >= MAX_FAILED_ATTEMPTS ? now + LOCKOUT_MS : 0 });
+    await writeFailures(db, key, count, count >= MAX_FAILED_ATTEMPTS ? now + LOCKOUT_MS : 0);
     await logAudit(db, {
       userId: user?.user_id ?? null, action: "LOGIN_FAILED", entityType: "USER",
       recordId: user?.user_id ?? null, newValue: username.trim().slice(0, 80),
     });
     throw new Error("Invalid username or password.");
   }
-  failures.delete(key);
+  if (failed) await clearFailures(db, key);
 
   await db.execute("UPDATE users SET last_login_at = ? WHERE user_id = ?", [nowIso(), user.user_id]);
   await logAudit(db, { userId: user.user_id, action: "LOGIN", entityType: "USER", recordId: user.user_id });
@@ -177,8 +196,16 @@ export async function recordSessionEvent(
   await logAudit(db, { userId: session.userId, action, entityType: "USER", recordId: session.userId });
 }
 
-export function validatePassword(plain: string): void {
-  if (plain.length < 8) throw new Error("Password must be at least 8 characters.");
+export const MIN_PASSWORD_LENGTH = 12;
+
+/** Pass the account user name when it is known, so a password equal to it is refused. */
+export function validatePassword(plain: string, username?: string): void {
+  if (plain.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+  }
+  if (username && plain.trim().toLowerCase() === username.trim().toLowerCase()) {
+    throw new Error("Password must not be the same as the user name.");
+  }
 }
 
 export async function getIdleLockMinutes(db: Db): Promise<number> {

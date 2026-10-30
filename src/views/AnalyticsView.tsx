@@ -17,6 +17,7 @@ import {
   type AnalyticsSummary,
 } from "../services/analytics";
 import { getSpecialties, type Specialty } from "../services/masterData";
+import { logError } from "../services/logger";
 
 export const AnalyticsView: React.FC = () => {
   const { db, visualEffects } = useApp();
@@ -39,7 +40,7 @@ export const AnalyticsView: React.FC = () => {
         setSummary(sumRes);
         setSpecialties(specList);
       } catch (err) {
-        console.error(err);
+        logError("AnalyticsView.load", err);
       } finally {
         setLoading(false);
       }

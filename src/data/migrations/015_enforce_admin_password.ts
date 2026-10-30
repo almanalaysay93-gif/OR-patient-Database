@@ -1,5 +1,5 @@
 /**
- * Migration 015 - guarantees the master administrator password is transplant@123
+ * Migration 015 - guarantees the master administrator password is the station default
  * across all existing installations, matching both username 'admin' and user_id 'usr-admin'.
  * Sets must_change_password to 0 for immediate workstation access.
  */

@@ -12,6 +12,7 @@ import { DemoDataPanel } from "../components/admin/DemoDataPanel";
 import { AuditPanel } from "../components/admin/AuditPanel";
 import { DonorRelationshipPanel } from "../components/admin/DonorRelationshipPanel";
 import { GoogleSheetPanel } from "../components/admin/GoogleSheetPanel";
+import { logError } from "../services/logger";
 
 export const SettingsView: React.FC = () => {
   const { db, session, can, theme, setTheme, visualEffects, setVisualEffects, notify } = useApp();
@@ -42,7 +43,7 @@ export const SettingsView: React.FC = () => {
         if (deptRow[0]?.value) setDepartmentName(deptRow[0].value);
         if (migRow[0]?.v) setSchemaVersion(migRow[0].v);
       } catch (err) {
-        console.error(err);
+        logError("SettingsView.save", err);
       }
     }
     load();
@@ -119,7 +120,7 @@ export const SettingsView: React.FC = () => {
           <div style={{ fontSize: "13px" }}>
             Signed in as <strong>{session?.fullName}</strong> ({session?.username}) &bull; {session?.roleName}
           </div>
-          {([["current", "Current password", "current-password"], ["next", "New password (8+ characters)", "new-password"], ["repeat", "Repeat new password", "new-password"]] as const).map(([key, text, auto]) => (
+          {([["current", "Current password", "current-password"], ["next", "New password (12+ characters)", "new-password"], ["repeat", "Repeat new password", "new-password"]] as const).map(([key, text, auto]) => (
             <div key={key}>
               <label htmlFor={`pw-${key}`} style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>{text}</label>
               <input id={`pw-${key}`} className="glass-input" type="password" autoComplete={auto} value={passwords[key]} onChange={(e) => setPasswords({ ...passwords, [key]: e.target.value })} />
@@ -252,7 +253,8 @@ export const SettingsView: React.FC = () => {
         {(can("export.deidentified") || can("export.identifiable")) && <ExportPanel />}
         {can("export.identifiable") && <GoogleSheetPanel />}
         {can("users.manage") && <UsersPanel />}
-        {(can("db.backup") || can("db.restore")) && <BackupPanel />}
+        {/* Backups & Restore is for the administrator only: no other role holds db.restore. */}
+        {can("db.restore") && <BackupPanel />}
         {can("audit.view") && <AuditPanel />}
         {can("users.manage") && <DemoDataPanel />}
       </div>

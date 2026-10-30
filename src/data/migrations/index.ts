@@ -19,6 +19,8 @@ import { M016_CLINICAL_FIXES_AND_ALLERGIES } from "./016_clinical_fixes_and_alle
 import { M017_PREOP_DIALYSIS_AND_DONOR } from "./017_preop_dialysis_and_donor";
 import { M018_DONOR_RELATIONSHIP_TYPES } from "./018_donor_relationship_types";
 import { M019_SHEET_SYNC } from "./019_sheet_sync";
+import { M020_REVOKE_PUBLIC_ADMIN_PASSWORD } from "./020_revoke_public_admin_password";
+import { M021_STAFF_SAVED_PASSWORDS } from "./021_staff_saved_passwords";
 
 export interface Migration {
   version: number;
@@ -47,6 +49,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 17, name: "preop_dialysis_and_donor", sql: M017_PREOP_DIALYSIS_AND_DONOR },
   { version: 18, name: "donor_relationship_types", sql: M018_DONOR_RELATIONSHIP_TYPES },
   { version: 19, name: "sheet_sync", sql: M019_SHEET_SYNC },
+  { version: 20, name: "revoke_public_admin_password", sql: M020_REVOKE_PUBLIC_ADMIN_PASSWORD },
+  { version: 21, name: "staff_saved_passwords", sql: M021_STAFF_SAVED_PASSWORDS },
 ];
 
 export interface MigrationResult {

@@ -30,6 +30,7 @@ import {
   type AttachmentCategory,
 } from "../../services/laboratory";
 import type { SurgicalCase } from "../../services/patients";
+import { logError } from "../../services/logger";
 
 interface LaboratoryPanelProps {
   db: Db;
@@ -87,7 +88,7 @@ export const LaboratoryPanel: React.FC<LaboratoryPanelProps> = ({ db, patientId,
       setLabs(labList);
       setAttachments(attList);
     } catch (err) {
-      console.error(err);
+      logError("LaboratoryPanel.load", err);
       notify((err as Error).message, "error");
     } finally {
       setLoading(false);

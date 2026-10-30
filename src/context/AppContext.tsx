@@ -9,6 +9,7 @@ import { changeOwnPassword } from "../services/userAdmin";
 import { hasPermission, setActiveSession } from "../services/session";
 import { flushSheetSync } from "../services/sheetSync";
 import { runScheduledBackup } from "../services/backup";
+import { logCatch, logError } from "../services/logger";
 
 export type NavView =
   | "dashboard"
@@ -18,7 +19,8 @@ export type NavView =
   | "intraor"
   | "postor"
   | "analytics"
-  | "settings";
+  | "settings"
+  | "appmap";
 
 /** Permission needed to open each screen. Settings is open to everyone; its sections are gated one by one. */
 const VIEW_PERMISSION: Record<NavView, string | null> = {
@@ -30,6 +32,7 @@ const VIEW_PERMISSION: Record<NavView, string | null> = {
   postor: "patients.view",
   analytics: "analytics.access",
   settings: null,
+  appmap: null,
 };
 
 export function canOpenView(session: UserSession | null, view: NavView): boolean {
@@ -139,7 +142,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setVisualEffectsState(effectsRow[0].value as VisualEffectsMode);
         }
       } catch (err) {
-        console.error("Database initialization failed:", err);
+        logError("AppContext.initDb", err);
         setError((err as Error).message);
       } finally {
         setLoading(false);
@@ -160,7 +163,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setThemeState(t);
     document.documentElement.setAttribute("data-theme", t);
     if (db) {
-      db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('theme', ?)", [t]).catch(console.error);
+      db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('theme', ?)", [t]).catch(logCatch("AppContext.theme"));
     }
   };
 
@@ -168,7 +171,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setVisualEffectsState(mode);
     document.documentElement.className = mode === "REDUCED" ? "effects-reduced" : mode === "OFF" ? "effects-off" : "";
     if (db) {
-      db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('visual_effects', ?)", [mode]).catch(console.error);
+      db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('visual_effects', ?)", [mode]).catch(logCatch("AppContext.visualEffects"));
     }
   };
 
@@ -187,7 +190,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!s.mustChangePassword) {
       notify(`Signed in as ${s.fullName} (${s.roleName})`, "success");
       // Send baselines that were saved while the workstation was offline.
-      if (db) flushSheetSync(db).catch(console.error);
+      if (db) flushSheetSync(db).catch(logCatch("AppContext.sheetSync"));
     }
   };
 
@@ -197,7 +200,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const onLogout = async () => {
-    if (db && session) await recordSessionEvent(db, session, "LOGOUT").catch(console.error);
+    if (db && session) await recordSessionEvent(db, session, "LOGOUT").catch(logCatch("AppContext.logout"));
     setActiveSession(null);
     setSession(null);
     setLocked(false);
@@ -215,7 +218,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLocked(true);
     setSearchOpen(false);
     setAssistantOpen(false);
-    recordSessionEvent(db, session, reason).catch(console.error);
+    recordSessionEvent(db, session, reason).catch(logCatch("AppContext.sessionEvent"));
   }, [db, session]);
 
   const unlock = async (password: string) => {

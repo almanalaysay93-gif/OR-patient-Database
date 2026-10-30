@@ -1,11 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { strFromU8, unzipSync } from "fflate";
 import { openMemoryDb } from "../data/sqljs-adapter";
-import { runMigrations } from "../data/migrations";
+import { MIGRATIONS, runMigrations } from "../data/migrations";
+import { M020_REVOKE_PUBLIC_ADMIN_PASSWORD } from "../data/migrations/020_revoke_public_admin_password";
 import type { Db } from "../data/db";
 import { ADMIN_SESSION } from "../test/setup";
 import { setActiveSession, PermissionError, type UserSession } from "./session";
-import { getIdleLockMinutes, login, recordSessionEvent, unlockSession } from "./auth";
+import { getIdleLockMinutes, login, recordSessionEvent, unlockSession, validatePassword } from "./auth";
 import {
   changeOwnPassword, createUser, listUsers, resetUserPassword, setUserActive, setUserRole, MASTER_ADMIN_ID,
 } from "./userAdmin";
@@ -90,6 +91,38 @@ describe("master admin sign-in", () => {
     expect(session.username).toBe("lockme");
   });
 
+  it("keeps the lockout after a reload of the app on the same database", async () => {
+    await addStaff("reload.me", "role-nurse");
+    const t0 = 7_000_000;
+    for (let i = 0; i < 5; i++) {
+      await expect(login(db, "reload.me", "bad", t0)).rejects.toThrow("Invalid username or password.");
+    }
+    vi.resetModules();
+    const fresh = await import("./auth");
+    await expect(fresh.login(db, "reload.me", STAFF_PASSWORD, t0 + 1_000)).rejects.toThrow("Too many failed attempts");
+    expect((await fresh.login(db, "reload.me", STAFF_PASSWORD, t0 + 60_001)).username).toBe("reload.me");
+    const left = await db.select("SELECT key FROM app_settings WHERE key LIKE 'login_failures:%'");
+    expect(left).toHaveLength(0);
+  });
+
+  it("requires 12 or more characters and a password that is not the user name", () => {
+    expect(() => validatePassword("elevenchars")).toThrow("at least 12 characters");
+    expect(() => validatePassword("twelve-chars")).not.toThrow();
+    expect(() => validatePassword("nurse.longname", "Nurse.LongName")).toThrow("same as the user name");
+    expect(() => validatePassword("nurse.longname", "nurse.other")).not.toThrow();
+  });
+
+  it("refuses the user name as the password when an account is created or its password is set", async () => {
+    await expect(createUser(db, {
+      username: "nurse.longname", fullName: "Nurse Long", roleId: "role-nurse", password: "nurse.longname",
+    })).rejects.toThrow("same as the user name");
+    const nurse = await addStaff("nurse.second", "role-nurse");
+    await expect(resetUserPassword(db, nurse.userId, "NURSE.SECOND")).rejects.toThrow("same as the user name");
+    setActiveSession(nurse);
+    await expect(changeOwnPassword(db, STAFF_PASSWORD, "nurse.second")).rejects.toThrow("same as the user name");
+    setActiveSession(ADMIN_SESSION);
+  });
+
   it("unlocks only with the signed-in user's own password and records lock events", async () => {
     const nurse = await addStaff("nurse.a", "role-nurse");
     await recordSessionEvent(db, nurse, "IDLE_LOCK");
@@ -123,7 +156,7 @@ describe("staff accounts", () => {
     const base = { username: "valid.user", fullName: "Valid User", roleId: "role-nurse", password: STAFF_PASSWORD };
     await expect(createUser(db, { ...base, username: "a b" })).rejects.toThrow("Username must be");
     await expect(createUser(db, { ...base, fullName: "  " })).rejects.toThrow("full name");
-    await expect(createUser(db, { ...base, password: "short" })).rejects.toThrow("at least 8 characters");
+    await expect(createUser(db, { ...base, password: "short" })).rejects.toThrow("at least 12 characters");
     await expect(createUser(db, { ...base, roleId: "role-nope" })).rejects.toThrow("valid role");
     await expect(createUser(db, { ...base, username: "admin" })).rejects.toThrow("already in use");
   });
@@ -164,7 +197,7 @@ describe("staff accounts", () => {
     await expect(login(db, "nurse.e", STAFF_PASSWORD, 1)).rejects.toThrow();
     setActiveSession(await login(db, "nurse.e", "reset-pass-9", 2));
     await expect(changeOwnPassword(db, "not-it", "another-pass-1")).rejects.toThrow("Current password is incorrect.");
-    await expect(changeOwnPassword(db, "reset-pass-9", "short")).rejects.toThrow("at least 8");
+    await expect(changeOwnPassword(db, "reset-pass-9", "short")).rejects.toThrow("at least 12");
     await expect(changeOwnPassword(db, "reset-pass-9", "reset-pass-9")).rejects.toThrow("different");
     await changeOwnPassword(db, "reset-pass-9", "another-pass-1");
     expect((await lastAudit("CHANGE_OWN_PASSWORD")).user_id).toBe(nurse.userId);
@@ -284,9 +317,12 @@ describe("read enforcement", () => {
 describe("forced password change", () => {
   const BLOCKED = "Change your password to continue.";
 
-  it("allows the seeded admin with transplant@123 to access the system directly", async () => {
+  it("forces a change for an account that still uses a password published in this repository", async () => {
+    expect(MIGRATIONS.find((m) => m.version === 20)?.sql).toBe(M020_REVOKE_PUBLIC_ADMIN_PASSWORD);
     const session = await login(db, "admin", ADMIN_PASSWORD);
-    expect(session.mustChangePassword).toBe(false);
+    expect(session.mustChangePassword).toBe(true);
+    setActiveSession(session);
+    await expect(listPatients(db)).rejects.toThrow(BLOCKED);
   });
 
   it("blocks any account flagged with must_change_password until replaced", async () => {
@@ -363,6 +399,9 @@ describe("audit attribution", () => {
     expect(mine.length).toBeGreaterThan(0);
     expect(mine.every((e) => e.username === "nurse.h" && e.user_full_name === "Staff nurse.h")).toBe(true);
     expect(await getAuditHistory(db, { limit: 2 })).toHaveLength(2);
+    const all = await getAuditHistory(db, { limit: 1000 });
+    const page2 = await getAuditHistory(db, { limit: 2, offset: 2 });
+    expect(page2.map((e) => e.audit_id)).toEqual(all.slice(2, 4).map((e) => e.audit_id));
   });
 });
 

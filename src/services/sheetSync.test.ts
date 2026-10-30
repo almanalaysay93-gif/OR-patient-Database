@@ -10,7 +10,8 @@ import { createAdmission, createPatient, createSurgicalCase } from "./patients";
 import { savePreopBaseline } from "./preopBaseline";
 import { completeCase, savePostOrRecord, saveIntraOrRecord } from "./intraPostOr";
 import {
-  flushSheetSync, getSheetSyncConfig, getSheetSyncStatus, queueAllForSheet, saveSheetSyncConfig, type Poster,
+  flushSheetSync, getSheetSyncConfig, getSheetSyncStatus, queueAllForSheet, retryDelayMs, saveSheetSyncConfig,
+  SYNC_TIMEOUT_MS, type Poster,
 } from "./sheetSync";
 
 const URL = "https://script.google.com/macros/s/AKfycbTEST_id-1/exec";
@@ -86,11 +87,88 @@ describe("Google Sheet sync", () => {
     expect(await flushSheetSync(db, refused.post)).toMatchObject({ sent: 0, pending: 1, error: "The sync token does not match the Sheet." });
 
     const signInPage = recorder({ ok: true, status: 200, text: "<html>Sign in</html>" });
-    expect((await flushSheetSync(db, signInPage.post)).error).toContain("did not accept");
+    expect((await flushSheetSync(db, signInPage.post, { force: true })).error).toContain("did not accept");
 
     const offline: Poster = async () => { throw new TypeError("Failed to fetch"); };
-    expect(await flushSheetSync(db, offline)).toMatchObject({ pending: 1, error: "No connection to Google. The rows stay queued." });
+    expect(await flushSheetSync(db, offline, { force: true })).toMatchObject({ pending: 1, error: "No connection to Google. The rows stay queued." });
     expect((await getSheetSyncStatus(db)).lastError).toBe("No connection to Google. The rows stay queued.");
+  });
+
+  it("stops waiting for a Sheet that never answers and keeps the row queued", async () => {
+    await saveSheetSyncConfig(db, { url: URL, token: TOKEN });
+    await caseWithBaseline();
+    let aborted = false;
+    const hang: Poster = (_url, _body, signal) => {
+      signal?.addEventListener("abort", () => { aborted = true; });
+      return new Promise(() => undefined);
+    };
+    const r = await flushSheetSync(db, hang, { timeoutMs: 20 });
+    expect(r).toMatchObject({ sent: 0, pending: 1 });
+    expect(r.error).toContain("did not answer within");
+    expect(aborted).toBe(true);
+    const status = await getSheetSyncStatus(db);
+    expect(status.pending).toBe(1);
+    expect(status.lastError).toContain("did not answer within");
+    expect(SYNC_TIMEOUT_MS).toBe(30_000);
+  });
+
+  it("never runs two sends at once and sends a case saved during a send", async () => {
+    await saveSheetSyncConfig(db, { url: URL, token: TOKEN });
+    await caseWithBaseline("HRN-1");
+    let open = 0;
+    let maxOpen = 0;
+    const sentHrns: unknown[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const slow: Poster = async (_url, body) => {
+      open++;
+      maxOpen = Math.max(maxOpen, open);
+      if (sentHrns.length === 0) await gate;
+      sentHrns.push(...JSON.parse(body).rows.map((row: { hrn: unknown }) => row.hrn));
+      open--;
+      return { ok: true, status: 200, text: '{"ok":true}' };
+    };
+    const first = flushSheetSync(db, slow);
+    await new Promise((r) => setTimeout(r, 10));
+    await caseWithBaseline("HRN-2");
+    const second = flushSheetSync(db, slow);
+    await new Promise((r) => setTimeout(r, 20));
+    release();
+    const [a, b] = await Promise.all([first, second]);
+    expect(maxOpen).toBe(1);
+    expect(a.sent).toBe(1);
+    expect(b).toMatchObject({ sent: 1, pending: 0, error: null });
+    expect(sentHrns).toEqual(["HRN-1", "HRN-2"]);
+  });
+
+  it("waits longer after each failure before an automatic try, up to 15 minutes", async () => {
+    expect([0, 1, 2, 3, 6, 50].map(retryDelayMs)).toEqual([0, 30_000, 60_000, 120_000, 900_000, 900_000]);
+    await saveSheetSyncConfig(db, { url: URL, token: TOKEN });
+    await caseWithBaseline();
+    let t = 1_000_000;
+    const now = () => t;
+    let calls = 0;
+    const offline: Poster = async () => { calls++; throw new TypeError("Failed to fetch"); };
+    await flushSheetSync(db, offline, { now });
+    expect(calls).toBe(1);
+
+    t += 29_000;
+    const waiting = await flushSheetSync(db, offline, { now });
+    expect(calls).toBe(1);
+    expect(waiting).toMatchObject({ sent: 0, pending: 1 });
+    expect(waiting.error).toContain("next automatic try is in 1 s");
+
+    t += 1_000;
+    await flushSheetSync(db, offline, { now });
+    expect(calls).toBe(2);
+    t += 59_000;
+    await flushSheetSync(db, offline, { now });
+    expect(calls).toBe(2);
+
+    const ok = recorder({ ok: true, status: 200, text: '{"ok":true}' });
+    expect(await flushSheetSync(db, ok.post, { now, force: true })).toMatchObject({ sent: 1, pending: 0, error: null });
+    await caseWithBaseline("HRN-2");
+    expect((await flushSheetSync(db, ok.post, { now })).sent).toBe(1);
   });
 
   it("lets a nurse's save reach the Sheet without export rights, but not change the connection", async () => {

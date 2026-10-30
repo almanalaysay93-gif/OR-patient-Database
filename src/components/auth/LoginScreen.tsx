@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { ShieldCheck, LogIn } from "lucide-react";
 import { useApp } from "../../context/AppContext";
+import { PasswordInput } from "./PasswordInput";
 
 export const LoginScreen: React.FC = () => {
   const { db, login } = useApp();
@@ -46,8 +47,8 @@ export const LoginScreen: React.FC = () => {
         </div>
         <div>
           <label htmlFor="login-password" style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Password</label>
-          <input
-            id="login-password" className="glass-input" type="password" autoComplete="current-password"
+          <PasswordInput
+            id="login-password" autoComplete="current-password"
             value={password} onChange={(e) => setPassword(e.target.value)}
           />
         </div>
@@ -64,6 +65,19 @@ export const LoginScreen: React.FC = () => {
         <p style={{ fontSize: "11px", color: "var(--text-muted)", lineHeight: 1.5 }}>
           Accounts are created by the administrator. Ask them if you need one or forgot your password.
         </p>
+
+        {/* DRAFT notice: wording needs approval by the hospital data protection officer before release. */}
+        <section aria-labelledby="login-notice-title" style={{ fontSize: "11px", color: "var(--text-muted)", lineHeight: 1.5, borderTop: "1px solid var(--border-glass)", paddingTop: "12px" }}>
+          <h2 id="login-notice-title" style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-main)", marginBottom: "4px" }}>
+            Authorized use only
+          </h2>
+          <p>
+            This station holds personal and health information of patients.
+            Sign in only with your own account and only for patient care or approved hospital work.
+            Data is handled under the Data Privacy Act of 2012 (Republic Act No. 10173) and hospital policy.
+            Actions are recorded in an audit log.
+          </p>
+        </section>
       </form>
     </div>
   );

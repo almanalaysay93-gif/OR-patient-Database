@@ -45,7 +45,7 @@ export const GoogleSheetPanel: React.FC = () => {
     setBusy(true);
     try {
       if (all) await queueAllForSheet(db);
-      const r = await flushSheetSync(db);
+      const r = await flushSheetSync(db, undefined, { force: true });
       if (r.error) notify(`Google Sheet not updated: ${r.error}`, "error");
       else notify(`${r.sent} case(s) sent to the Google Sheet.`, "success");
       await reload();

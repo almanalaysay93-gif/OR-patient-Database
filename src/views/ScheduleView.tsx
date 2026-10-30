@@ -19,6 +19,7 @@ import {
 import { getOrRooms, type OrRoom } from "../services/masterData";
 import { CaseEventsPanel } from "../components/clinical/CaseEventsPanel";
 import { DataTable } from "../components/common/DataTable";
+import { logError } from "../services/logger";
 
 export const ScheduleView: React.FC = () => {
   const { db, setView, setSelectedPatientId, selectedCaseId, setSelectedCaseId, notify } = useApp();
@@ -49,7 +50,7 @@ export const ScheduleView: React.FC = () => {
       setRooms(roomList);
       if (roomList.length > 0 && !schedRoomId) setSchedRoomId(roomList[0].or_room_id);
     } catch (err) {
-      console.error(err);
+      logError("ScheduleView.load", err);
     }
   };
 

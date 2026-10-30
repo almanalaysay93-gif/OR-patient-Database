@@ -1,0 +1,87 @@
+/* Print rules: a printed case shows only the active screen, in black on white. Loaded after index.css. */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  :root,
+  [data-theme="dark"] {
+    --bg-app: #fff;
+    --bg-card: #fff;
+    --bg-card-hover: #fff;
+    --bg-card-active: #fff;
+    --text-main: #000;
+    --text-muted: #333;
+    --text-subtle: #555;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Navigation, assistant, controls and the skip link have no use on paper. */
+  .glass-sidebar,
+  .glass-header,
+  aside,
+  .skip-link,
+  .glass-btn,
+  [role="status"][aria-live] {
+    display: none !important;
+  }
+
+  /* The app shell scrolls inside a 100vh box. Let the page grow so every row prints. */
+  #root,
+  #root > *,
+  #root div:has(> #main-content),
+  #main-content,
+  #main-content * {
+    overflow: visible !important;
+  }
+
+  #root,
+  #root > *,
+  #root div:has(> #main-content),
+  #main-content {
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  #main-content {
+    display: block !important;
+  }
+
+  #main-content * {
+    background: transparent !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .glass-card {
+    border: 1px solid #999 !important;
+    break-inside: avoid;
+  }
+
+  .glass-input {
+    border: 1px solid #999 !important;
+  }
+
+  table {
+    border-collapse: collapse;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+}

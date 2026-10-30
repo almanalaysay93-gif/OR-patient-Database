@@ -70,7 +70,9 @@ function doPost(e) {
     }
     return reply_({ ok: true, count: rows.length });
   } catch (err) {
-    return reply_({ ok: false, error: 'Sheet error: ' + (err && err.message ? err.message : String(err)) });
+    // Detail stays in the Apps Script execution log. The caller gets a generic message only.
+    console.error('OR Station sync failed: ' + (err && err.message ? err.message : String(err)));
+    return reply_({ ok: false, error: 'The sheet could not save the rows. Check the Apps Script execution log.' });
   }
 }
 
@@ -78,12 +80,12 @@ function setup() {
   sheet_();
 }
 
-/** Numbers and times are plain values. Only text gets the formula guard. */
+/** Numbers and times are plain values. Only text gets the formula guard, including a leading tab or carriage return. */
 function cell_(v) {
   if (v === null || v === undefined) return '';
   if (typeof v === 'number' || typeof v === 'boolean') return v;
   var s = String(v);
-  return /^[=+\-@]/.test(s) ? "'" + s : s;
+  return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
 }
 
 /** Writes the header on every call, so a newer column list replaces an older header. */

@@ -61,13 +61,57 @@ export interface SyncResult {
 }
 
 /** Fetch is injectable so tests never reach the network. */
-export type Poster = (url: string, body: string) => Promise<{ ok: boolean; status: number; text: string }>;
+export type Poster = (url: string, body: string, signal?: AbortSignal) => Promise<{ ok: boolean; status: number; text: string }>;
 
-const defaultPoster: Poster = async (url, body) => {
+const defaultPoster: Poster = async (url, body, signal) => {
   // text/plain keeps the request "simple", so the browser sends it without a CORS preflight.
-  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body, redirect: "follow" });
+  const res = await fetch(url, {
+    method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body, redirect: "follow", signal,
+  });
   return { ok: res.ok, status: res.status, text: await res.text() };
 };
+
+/** One request (send and read the reply) may take this long before the batch counts as failed. */
+export const SYNC_TIMEOUT_MS = 30_000;
+/** Wait after a failed send before an automatic send tries again: 30 s, doubled per failure, at most 15 min. */
+export const RETRY_BASE_MS = 30_000;
+export const RETRY_MAX_MS = 15 * 60_000;
+
+export function retryDelayMs(failures: number): number {
+  if (failures <= 0) return 0;
+  return Math.min(RETRY_BASE_MS * 2 ** Math.min(failures - 1, 20), RETRY_MAX_MS);
+}
+
+export interface FlushOptions {
+  /** A person pressed "Send now": skip the wait after a failure. */
+  force?: boolean;
+  timeoutMs?: number;
+  now?: () => number;
+}
+
+class SyncTimeout extends Error {}
+
+/** Runs the poster with an abort signal and stops waiting when the time is up, even if the poster ignores the signal. */
+async function postWithTimeout(post: Poster, url: string, body: string, ms: number) {
+  const ctrl = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      ctrl.abort();
+      reject(new SyncTimeout(`The Google Sheet did not answer within ${Math.round(ms / 1000)} s. The rows stay queued.`));
+    }, ms);
+  });
+  try {
+    return await Promise.race([post(url, body, ctrl.signal), expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Per open database: the running send (so sends never overlap) and the failure count for the retry wait.
+// This state is in memory, so a reload starts with no wait.
+const running = new WeakMap<object, Promise<SyncResult>>();
+const failures = new WeakMap<object, { count: number; at: number }>();
 
 async function readSetting(db: RawDb, key: string): Promise<string> {
   const rows = await db.select<{ value: string }>("SELECT value FROM app_settings WHERE key = ?", [key]);
@@ -167,13 +211,37 @@ async function buildRows(db: Db, caseIds: string[]): Promise<SheetRow[]> {
 /**
  * Send queued cases. Any signed-in user may trigger it: the administrator chose
  * the destination, and the person saving a baseline should not need export rights.
+ * A call made while a send runs waits for it and then sends what is still queued,
+ * so only one request is open at a time.
  */
-export async function flushSheetSync(db: Db, post: Poster = defaultPoster): Promise<SyncResult> {
+export function flushSheetSync(db: Db, post: Poster = defaultPoster, opts: FlushOptions = {}): Promise<SyncResult> {
+  const before = running.get(db);
+  const next = (before ? before.catch(() => undefined) : Promise.resolve()).then(() => flushOnce(db, post, opts));
+  running.set(db, next);
+  const clear = () => { if (running.get(db) === next) running.delete(db); };
+  next.then(clear, clear);
+  return next;
+}
+
+async function flushOnce(db: Db, post: Poster, opts: FlushOptions): Promise<SyncResult> {
   const userId = requireSession();
+  const now = opts.now ?? Date.now;
+  const timeoutMs = opts.timeoutMs ?? SYNC_TIMEOUT_MS;
   const url = await readSetting(db, URL_KEY);
   const token = await readSetting(db, TOKEN_KEY);
   const queued = await db.select<{ case_id: string }>("SELECT case_id FROM sheet_sync_pending ORDER BY queued_at");
   if (!url || !token || !queued.length) return { sent: 0, pending: queued.length, error: null };
+
+  const failed = failures.get(db);
+  if (failed && !opts.force) {
+    const waitMs = failed.at + retryDelayMs(failed.count) - now();
+    if (waitMs > 0) {
+      return {
+        sent: 0, pending: queued.length,
+        error: `The last send failed. The next automatic try is in ${Math.ceil(waitMs / 1000)} s. The rows stay queued.`,
+      };
+    }
+  }
 
   let sent = 0;
   let error: string | null = null;
@@ -182,7 +250,7 @@ export async function flushSheetSync(db: Db, post: Poster = defaultPoster): Prom
     const startedAt = nowIso();
     try {
       const rows = await buildRows(db, ids);
-      const res = await post(url, JSON.stringify({ token, rows }));
+      const res = await postWithTimeout(post, url, JSON.stringify({ token, rows }), timeoutMs);
       let reply: { ok?: boolean; error?: string } = {};
       try { reply = JSON.parse(res.text); } catch { /* a sign-in page or HTML error */ }
       if (!res.ok || !reply.ok) {
@@ -202,6 +270,8 @@ export async function flushSheetSync(db: Db, post: Poster = defaultPoster): Prom
         `UPDATE sheet_sync_pending SET attempts = attempts + 1, last_error = ? WHERE case_id IN (${marks})`, [error, ...ids]);
     }
   }
+  if (error) failures.set(db, { count: (failed?.count ?? 0) + 1, at: now() });
+  else failures.delete(db);
   const left = await db.select<{ n: number }>("SELECT COUNT(*) AS n FROM sheet_sync_pending");
   return { sent, pending: left[0]?.n || 0, error };
 }

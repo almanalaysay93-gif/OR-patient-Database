@@ -1,5 +1,5 @@
 /**
- * Migration 013 - sets the master administrator password to transplant@123
+ * Migration 013 - sets the master administrator password to the station default
  * and resets must_change_password to 0 for immediate station access.
  * An administrator password that was already changed by the user is preserved.
  */

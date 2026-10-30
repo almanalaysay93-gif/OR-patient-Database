@@ -13,6 +13,7 @@ import { PreopBaselinePanel } from "../components/clinical/PreopBaselinePanel";
 import { SafetyPhasesPanel } from "../components/clinical/SafetyPhasesPanel";
 import { filterBoardRows, pageBoardRows } from "../services/preOrBoardTable";
 import type { CaseStatus } from "../services/patients";
+import { logError } from "../services/logger";
 
 export const PreOrView: React.FC = () => {
   const { db, session, selectedCaseId, setSelectedCaseId, setSelectedPatientId, setView, notify } = useApp();
@@ -30,7 +31,7 @@ export const PreOrView: React.FC = () => {
       const rows = await getPreOrBoardCases(db);
       setBoardCases(rows);
     } catch (err) {
-      console.error(err);
+      logError("PreOrView.load", err);
     }
   };
 
@@ -53,7 +54,7 @@ export const PreOrView: React.FC = () => {
         setChecklistItems(res.items);
         setReadiness(res.readiness);
       } catch (err) {
-        console.error(err);
+        logError("PreOrView.save", err);
       }
     }
     loadChecklist();

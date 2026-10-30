@@ -3,6 +3,7 @@ import { Bot, X, Send, RotateCcw, User, FileText, ShieldCheck } from "lucide-rea
 import { useApp } from "../../context/AppContext";
 import { answerQuestion } from "../../services/assistant";
 import type { EntityMap, EntityRef } from "../../services/assistantTools";
+import { logError } from "../../services/logger";
 
 interface DisplayMessage {
   id: number;
@@ -175,7 +176,7 @@ export const AssistantPanel: React.FC = () => {
     try {
       addMessage("assistant", await answerQuestion(db, question, entitiesRef.current));
     } catch (err) {
-      console.error("Assistant error:", err);
+      logError("AssistantPanel.ask", err);
       addMessage("error", "Something went wrong while looking that up. Try again.");
     } finally {
       setBusy(false);

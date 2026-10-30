@@ -69,7 +69,7 @@ export async function logAudit(
 
 export async function getAuditHistory(
   db: Db,
-  filter?: { patientId?: string; caseId?: string; userId?: string; limit?: number }
+  filter?: { patientId?: string; caseId?: string; userId?: string; limit?: number; offset?: number }
 ): Promise<AuditEntry[]> {
   requirePermission("audit.view");
   const conditions: string[] = [];
@@ -90,7 +90,7 @@ export async function getAuditHistory(
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const limit = filter?.limit ?? 100;
-  params.push(limit);
+  params.push(limit, Math.max(0, filter?.offset ?? 0));
 
   return db.select<AuditEntry>(
     `SELECT a.*, u.username, u.full_name as user_full_name
@@ -98,7 +98,7 @@ export async function getAuditHistory(
      LEFT JOIN users u ON a.user_id = u.user_id
      ${where}
      ORDER BY a.timestamp DESC
-     LIMIT ?`,
+     LIMIT ? OFFSET ?`,
     params
   );
 }

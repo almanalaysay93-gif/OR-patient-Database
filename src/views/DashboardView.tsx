@@ -12,6 +12,7 @@ import { localDate } from "../data/db";
 import { getAnalyticsSummary, type AnalyticsSummary } from "../services/analytics";
 import { getScheduleByDate, type ScheduleItem } from "../services/scheduling";
 import { getOrRooms, type OrRoom } from "../services/masterData";
+import { logError } from "../services/logger";
 
 export const DashboardView: React.FC = () => {
   const { db, setView, setSelectedPatientId, setSelectedCaseId, setOpenRegisterModal } = useApp();
@@ -36,7 +37,7 @@ export const DashboardView: React.FC = () => {
         setSchedule(schedRes);
         setRooms(roomsRes);
       } catch (err) {
-        console.error("Dashboard data load error:", err);
+        logError("DashboardView.load", err);
       } finally {
         setLoading(false);
       }

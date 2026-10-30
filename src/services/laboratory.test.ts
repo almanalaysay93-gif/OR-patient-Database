@@ -15,6 +15,7 @@ import {
   getAttachmentsByLab,
   deleteAttachment,
   COMMON_LAB_PRESETS,
+  MAX_ATTACHMENT_BYTES,
 } from "./laboratory";
 
 let db: Db;
@@ -118,7 +119,7 @@ describe("Laboratory Results & Attachments Service", () => {
   });
 
   it("supports standalone clinical file attachments (procedure photos, docs)", async () => {
-    const fakeDoc = "data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrp...";
+    const fakeDoc = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==";
     const att = await createAttachment(db, {
       patientId: testPatientId,
       caseId: testCaseId,
@@ -155,7 +156,7 @@ describe("Laboratory Results & Attachments Service", () => {
           fileName: "pt_inr_report.pdf",
           fileType: "application/pdf",
           fileSize: 2048,
-          dataUrl: "data:application/pdf;base64,dGVzdA==",
+          dataUrl: "data:application/pdf;base64,JVBERi0xLjQK",
           category: "LAB_RESULT",
         },
       ],
@@ -171,6 +172,36 @@ describe("Laboratory Results & Attachments Service", () => {
 
     const afterAtts = await getAttachmentsByLab(db, lab.lab_id);
     expect(afterAtts.length).toBe(0);
+  });
+
+  it("refuses attachments that are not a real PNG, JPEG or PDF of 10 MB or less", async () => {
+    const base = { patientId: testPatientId, caseId: testCaseId, category: "LAB_RESULT" as const };
+    const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
+    const svg = `data:image/svg+xml;base64,${Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>").toString("base64")}`;
+    await expect(createAttachment(db, { ...base, fileName: "x.svg", fileType: "image/svg+xml", fileSize: 40, dataUrl: svg }))
+      .rejects.toThrow("PNG, JPEG or PDF");
+
+    const html = `data:image/png;base64,${Buffer.from("<html><script>alert(1)</script></html>").toString("base64")}`;
+    await expect(createAttachment(db, { ...base, fileName: "slip.png", fileType: "image/png", fileSize: 40, dataUrl: html }))
+      .rejects.toThrow("PNG, JPEG or PDF");
+
+    const pngHead = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    const big = new Uint8Array(11 * 1024 * 1024);
+    big.set(pngHead);
+    await expect(createAttachment(db, { ...base, fileName: "big.png", fileType: "image/png", fileSize: 1, dataUrl: `data:image/png;base64,${b64(big)}` }))
+      .rejects.toThrow("larger than 10 MB");
+
+    await expect(createLabResult(db, {
+      patientId: testPatientId, category: "CHEMISTRY", testName: "BUN", resultValue: "15",
+      attachments: [{ fileName: "slip.png", fileType: "image/png", fileSize: 40, dataUrl: html }],
+    })).rejects.toThrow("PNG, JPEG or PDF");
+    expect(await getLabResultsByPatient(db, testPatientId)).toHaveLength(0);
+    expect(await getAttachmentsByPatient(db, testPatientId)).toHaveLength(0);
+
+    const exact = new Uint8Array(MAX_ATTACHMENT_BYTES);
+    exact.set(pngHead);
+    const ok = await createAttachment(db, { ...base, fileName: "max.png", fileType: "image/png", fileSize: 1, dataUrl: `data:image/png;base64,${b64(exact)}` });
+    expect(ok.file_size).toBe(MAX_ATTACHMENT_BYTES);
   });
 
   it("enforces permission checks when adding lab results", async () => {

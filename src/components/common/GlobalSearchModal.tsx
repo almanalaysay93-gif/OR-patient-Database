@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Search, X, User, FileText, ArrowRight } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 import { searchGlobal, type Patient, type SurgicalCase } from "../../services/patients";
+import { logError } from "../../services/logger";
 
 export const GlobalSearchModal: React.FC = () => {
   const { db, searchOpen, setSearchOpen, setSelectedPatientId, setSelectedCaseId, setView } = useApp();
@@ -37,7 +38,7 @@ export const GlobalSearchModal: React.FC = () => {
         setPatients(res.patients);
         setCases(res.cases);
       } catch (err) {
-        console.error("Search error:", err);
+        logError("GlobalSearchModal.search", err);
       } finally {
         setLoading(false);
       }

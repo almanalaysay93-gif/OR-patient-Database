@@ -125,6 +125,47 @@ export interface CreateLabResultInput {
   }>;
 }
 
+/** Largest attachment the station stores, in bytes of decoded file data. */
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+const ATTACHMENT_SIGNATURES: Array<{ type: string; magic: number[] }> = [
+  { type: "image/png", magic: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
+  { type: "image/jpeg", magic: [0xff, 0xd8, 0xff] },
+  { type: "application/pdf", magic: [0x25, 0x50, 0x44, 0x46, 0x2d] },
+];
+
+/**
+ * Checks an attachment before it is stored. Only PNG, JPEG and PDF up to 10 MB are accepted,
+ * and the type is taken from the decoded bytes, so a renamed file is refused.
+ * Returns the verified type and size, which replace the values the caller sent.
+ */
+export function checkAttachment(att: { fileType: string; dataUrl: string }): { fileType: string; fileSize: number } {
+  const match = /^data:([a-z0-9.+-]+\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/]*={0,2})$/i.exec(att.dataUrl ?? "");
+  if (!match) throw new Error("Attachment must be a PNG, JPEG or PDF file.");
+  const declared = match[1].toLowerCase();
+  const b64 = match[2];
+  if (Math.floor((b64.length * 3) / 4) - (b64.match(/=+$/)?.[0].length ?? 0) > MAX_ATTACHMENT_BYTES) {
+    throw new Error("Attachment is larger than 10 MB.");
+  }
+  let head: string;
+  try {
+    head = atob(b64.slice(0, 16));
+  } catch {
+    throw new Error("Attachment must be a PNG, JPEG or PDF file.");
+  }
+  const sig = ATTACHMENT_SIGNATURES.find((s) => s.magic.every((byte, i) => head.charCodeAt(i) === byte));
+  if (!sig || sig.type !== declared || sig.type !== (att.fileType ?? "").toLowerCase()) {
+    throw new Error("Attachment must be a PNG, JPEG or PDF file.");
+  }
+  let size: number;
+  try {
+    size = atob(b64).length;
+  } catch {
+    throw new Error("Attachment must be a PNG, JPEG or PDF file.");
+  }
+  return { fileType: sig.type, fileSize: size };
+}
+
 export async function createLabResult(db: Db, input: CreateLabResultInput): Promise<PatientLabResult> {
   const userId = requirePermission("cases.edit", "patients.create", "patients.edit_demographics", "preor.edit");
   const now = nowIso();
@@ -137,6 +178,7 @@ export async function createLabResult(db: Db, input: CreateLabResultInput): Prom
   const specimenCollectedAt = input.specimenCollectedAt || now;
   const resultDate = input.resultDate || now.slice(0, 10);
   const flag = input.flag || "NORMAL";
+  const checked = (input.attachments ?? []).map((att) => checkAttachment(att));
 
   await db.transaction(async (tx) => {
     await tx.execute(
@@ -166,7 +208,7 @@ export async function createLabResult(db: Db, input: CreateLabResultInput): Prom
     );
 
     if (input.attachments && input.attachments.length > 0) {
-      for (const att of input.attachments) {
+      for (const [i, att] of input.attachments.entries()) {
         const attId = uuid();
         await tx.execute(
           `INSERT INTO clinical_attachments (
@@ -179,8 +221,8 @@ export async function createLabResult(db: Db, input: CreateLabResultInput): Prom
             labId,
             input.caseId || null,
             att.fileName,
-            att.fileType,
-            att.fileSize,
+            checked[i].fileType,
+            checked[i].fileSize,
             att.dataUrl,
             att.title?.trim() || testName,
             att.description?.trim() || null,
@@ -312,6 +354,7 @@ export async function createAttachment(db: Db, input: CreateAttachmentInput): Pr
   const now = nowIso();
   const attachmentId = uuid();
   const category = input.category || "LAB_RESULT";
+  const checked = checkAttachment(input);
 
   await db.transaction(async (tx) => {
     await tx.execute(
@@ -325,8 +368,8 @@ export async function createAttachment(db: Db, input: CreateAttachmentInput): Pr
         input.labId || null,
         input.caseId || null,
         input.fileName,
-        input.fileType,
-        input.fileSize,
+        checked.fileType,
+        checked.fileSize,
         input.dataUrl,
         input.title?.trim() || input.fileName,
         input.description?.trim() || null,
@@ -343,7 +386,7 @@ export async function createAttachment(db: Db, input: CreateAttachmentInput): Pr
       recordId: attachmentId,
       patientId: input.patientId,
       caseId: input.caseId || null,
-      newValue: `${input.fileName} (${category}, ${(input.fileSize / 1024).toFixed(1)} KB)`,
+      newValue: `${input.fileName} (${category}, ${(checked.fileSize / 1024).toFixed(1)} KB)`,
     });
   });
 

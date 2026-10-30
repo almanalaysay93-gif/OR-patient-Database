@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Lock, LogOut } from "lucide-react";
 import { useApp } from "../../context/AppContext";
+import { PasswordInput } from "./PasswordInput";
 
 /** Covers the app while it is locked. Unsaved work underneath is kept and comes back after unlocking. */
 export const LockScreen: React.FC = () => {
@@ -44,8 +45,8 @@ export const LockScreen: React.FC = () => {
 
         <div>
           <label htmlFor="unlock-password" style={{ display: "block", fontSize: "12px", fontWeight: 600, marginBottom: "6px" }}>Password</label>
-          <input
-            id="unlock-password" className="glass-input" type="password" autoFocus autoComplete="current-password"
+          <PasswordInput
+            id="unlock-password" autoFocus autoComplete="current-password"
             value={password} onChange={(e) => setPassword(e.target.value)}
           />
         </div>

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { KeyRound, LogOut } from "lucide-react";
 import { useApp } from "../../context/AppContext";
+import { PasswordInput } from "./PasswordInput";
 
 /** Shown instead of the app while the account still has a password someone else chose. */
 export const ChangePasswordScreen: React.FC = () => {
@@ -54,22 +55,22 @@ export const ChangePasswordScreen: React.FC = () => {
 
         <div>
           <label htmlFor="change-current" style={labelStyle}>Current password</label>
-          <input
-            id="change-current" className="glass-input" type="password" autoFocus autoComplete="current-password"
+          <PasswordInput
+            id="change-current" autoFocus autoComplete="current-password"
             value={current} onChange={(e) => setCurrent(e.target.value)}
           />
         </div>
         <div>
-          <label htmlFor="change-next" style={labelStyle}>New password (at least 8 characters)</label>
-          <input
-            id="change-next" className="glass-input" type="password" autoComplete="new-password"
+          <label htmlFor="change-next" style={labelStyle}>New password (at least 12 characters, not your user name)</label>
+          <PasswordInput
+            id="change-next" autoComplete="new-password"
             value={next} onChange={(e) => setNext(e.target.value)}
           />
         </div>
         <div>
           <label htmlFor="change-confirm" style={labelStyle}>Repeat new password</label>
-          <input
-            id="change-confirm" className="glass-input" type="password" autoComplete="new-password"
+          <PasswordInput
+            id="change-confirm" autoComplete="new-password"
             value={confirm} onChange={(e) => setConfirm(e.target.value)}
           />
         </div>

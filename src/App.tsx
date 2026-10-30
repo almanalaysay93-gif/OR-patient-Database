@@ -19,6 +19,7 @@ import { IntraOrView } from "./views/IntraOrView";
 import { PostOrView } from "./views/PostOrView";
 import { AnalyticsView } from "./views/AnalyticsView";
 import { SettingsView } from "./views/SettingsView";
+import { AppMapView } from "./views/AppMapView";
 
 /** Screens where a signed-in user may look but not save unless they hold one of these permissions. */
 const EDIT_PERMISSIONS: Partial<Record<NavView, string[]>> = {
@@ -53,12 +54,23 @@ const MainLayout: React.FC = () => {
         <>
           {/* Hidden, not unmounted, while locked: unsaved form entries survive the lock. */}
           <div inert={locked} style={{ display: locked ? "none" : "flex", flex: 1, minWidth: 0 }}>
+            {/* First Tab stop: moves focus past the sidebar and header to the active screen. */}
+            <a
+              href="#main-content"
+              className="skip-link"
+              onClick={(e) => {
+                e.preventDefault();
+                document.getElementById("main-content")?.focus();
+              }}
+            >
+              Skip to content
+            </a>
             <Sidebar />
 
             <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
               <Header />
 
-              <main style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
+              <main id="main-content" tabIndex={-1} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", outline: "none" }}>
                 {readOnly && (
                   <div role="status" className="badge badge-warning" style={{ margin: "16px 32px 0", padding: "8px 12px", fontSize: "13px" }}>
                     View only: your role ({session.roleName}) cannot save changes on this screen.
@@ -72,6 +84,7 @@ const MainLayout: React.FC = () => {
                 {currentView === "postor" && <PostOrView />}
                 {currentView === "analytics" && <AnalyticsView />}
                 {currentView === "settings" && <SettingsView />}
+                {currentView === "appmap" && <AppMapView />}
               </main>
             </div>
           </div>

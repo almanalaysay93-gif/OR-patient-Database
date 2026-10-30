@@ -24,6 +24,7 @@ import { CaseEventsPanel } from "../components/clinical/CaseEventsPanel";
 import { FollowupPanel } from "../components/clinical/FollowupPanel";
 import { getFollowupQueue } from "../services/followup";
 import { DataTable } from "../components/common/DataTable";
+import { logCatch, logError } from "../services/logger";
 
 export const PostOrView: React.FC = () => {
   const { db, session, selectedCaseId, setSelectedCaseId, notify } = useApp();
@@ -52,7 +53,7 @@ export const PostOrView: React.FC = () => {
   const [followupQueue, setFollowupQueue] = useState<Awaited<ReturnType<typeof getFollowupQueue>>>([]);
 
   useEffect(() => {
-    if (db) getFollowupQueue(db).then(setFollowupQueue).catch(console.error);
+    if (db) getFollowupQueue(db).then(setFollowupQueue).catch(logCatch("PostOrView.followup"));
   }, [db, selectedCaseId]);
 
   useEffect(() => {
@@ -81,7 +82,7 @@ export const PostOrView: React.FC = () => {
         setMortality(post?.mortality === 1);
         setNotes(post?.notes || "");
       } catch (err) {
-        console.error(err);
+        logError("PostOrView.save", err);
       }
     }
     load();

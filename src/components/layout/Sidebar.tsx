@@ -10,6 +10,7 @@ import {
   Settings,
   ShieldCheck,
   Film,
+  Workflow,
 } from "lucide-react";
 import { useApp, canOpenView, type NavView } from "../../context/AppContext";
 
@@ -29,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "postor", label: "Post-OR / PACU", icon: HeartPulse },
   { id: "analytics", label: "Analytics", icon: BarChart3, badge: "3D" },
   { id: "settings", label: "Settings", icon: Settings },
+  { id: "appmap", label: "App Map", icon: Workflow },
 ];
 
 export const Sidebar: React.FC = () => {
