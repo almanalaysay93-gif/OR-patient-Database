@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 
-export const Header: React.FC<{ onMenuClick: () => void }> = ({ onMenuClick }) => {
+export const Header: React.FC<{ menuOpen: boolean; onMenuClick: () => void }> = ({ menuOpen, onMenuClick }) => {
   const {
     session,
     theme,
@@ -36,7 +36,7 @@ export const Header: React.FC<{ onMenuClick: () => void }> = ({ onMenuClick }) =
 
   return (
     <header className="glass-header" style={{ height: "64px", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 28px" }}>
-      <button type="button" className="mobile-menu-button glass-btn glass-btn-secondary" onClick={onMenuClick} aria-label="Open navigation" aria-controls="app-navigation"><Menu size={20} /></button>
+      <button type="button" className="mobile-menu-button glass-btn glass-btn-secondary" onClick={onMenuClick} aria-label="Open navigation" aria-controls="app-navigation" aria-expanded={menuOpen}><Menu size={20} /></button>
       {/* Global Search Button */}
       <button
         onClick={() => setSearchOpen(true)}

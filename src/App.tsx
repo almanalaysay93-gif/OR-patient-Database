@@ -8,6 +8,7 @@ import { ChangePasswordScreen } from "./components/auth/ChangePasswordScreen";
 import { RecoveryKeyScreen } from "./components/auth/RecoveryKeyScreen";
 import { GlobalSearchModal } from "./components/common/GlobalSearchModal";
 import { AssistantPanel } from "./components/assistant/AssistantPanel";
+import { ArrowLeft } from "lucide-react";
 import { HyperFramesGuideModal } from "./components/video/HyperFramesGuideModal";
 
 // Views
@@ -31,9 +32,28 @@ const EDIT_PERMISSIONS: Partial<Record<NavView, string[]>> = {
 };
 
 const MainLayout: React.FC = () => {
-  const { currentView, session, locked, can, loading, needsRecoveryKey, error, toast } = useApp();
+  const { currentView, session, locked, can, loading, needsRecoveryKey, error, toast, setView } = useApp();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navWasOpen = useRef(false);
+  // Screens visited this session, for the phone back button.
+  const [viewHistory, setViewHistory] = useState<NavView[]>([]);
+  const lastView = useRef<NavView>(currentView);
+  const goingBack = useRef(false);
+  useEffect(() => {
+    if (currentView === lastView.current) return;
+    const previous = lastView.current;
+    lastView.current = currentView;
+    if (goingBack.current) { goingBack.current = false; return; }
+    setViewHistory((h) => [...h, previous].slice(-20));
+  }, [currentView]);
+  useEffect(() => { if (!session) { setViewHistory([]); lastView.current = currentView; } }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
+  const goBack = () => {
+    const previous = viewHistory[viewHistory.length - 1];
+    if (!previous) return;
+    goingBack.current = true;
+    setViewHistory((h) => h.slice(0, -1));
+    setView(previous);
+  };
   useEffect(() => { setMobileNavOpen(false); }, [currentView, locked]);
   useEffect(() => {
     if (mobileNavOpen) document.querySelector<HTMLElement>("#app-navigation nav button")?.focus();
@@ -46,6 +66,13 @@ const MainLayout: React.FC = () => {
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [mobileNavOpen]);
+  useEffect(() => {
+    // Drawer only exists on phones; close it if the window grows past that breakpoint.
+    const wide = window.matchMedia("(min-width: 768px)");
+    const closeWhenWide = () => { if (wide.matches) setMobileNavOpen(false); };
+    wide.addEventListener("change", closeWhenWide);
+    return () => wide.removeEventListener("change", closeWhenWide);
+  }, []);
   const editPermissions = EDIT_PERMISSIONS[currentView];
   const readOnly = !!editPermissions && !editPermissions.some(can);
 
@@ -82,8 +109,8 @@ const MainLayout: React.FC = () => {
             {mobileNavOpen && <button className="mobile-nav-backdrop" type="button" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />}
             <Sidebar mobileOpen={mobileNavOpen} onNavigate={() => setMobileNavOpen(false)} />
 
-            <div className="app-content" style={{ flex: 1, display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
-              <Header onMenuClick={() => setMobileNavOpen(true)} />
+            <div className="app-content" inert={mobileNavOpen} style={{ flex: 1, display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
+              <Header menuOpen={mobileNavOpen} onMenuClick={() => setMobileNavOpen(true)} />
 
               <main id="main-content" tabIndex={-1} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", outline: "none" }}>
                 {readOnly && (
@@ -101,6 +128,11 @@ const MainLayout: React.FC = () => {
                 {currentView === "settings" && <SettingsView />}
                 {currentView === "appmap" && <AppMapView />}
               </main>
+              {viewHistory.length > 0 && (
+                <button type="button" className="mobile-back-button glass-btn glass-btn-primary" onClick={goBack} aria-label="Go back to the previous screen">
+                  <ArrowLeft size={22} aria-hidden="true" />
+                </button>
+              )}
             </div>
           </div>
 

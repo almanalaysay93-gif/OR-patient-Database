@@ -131,6 +131,7 @@ body {
 }
 
 .mobile-menu-button,
+.mobile-back-button,
 .mobile-nav-backdrop {
   display: none;
 }
@@ -174,6 +175,20 @@ body {
   .glass-sidebar.mobile-open {
     visibility: visible;
     transform: translateX(0);
+  }
+  .mobile-back-button {
+    display: inline-flex;
+    position: fixed;
+    z-index: 1000;
+    left: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    width: 52px;
+    height: 52px;
+    padding: 0 !important;
+    justify-content: center;
+    align-items: center;
+    border-radius: 50%;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.28);
   }
   .mobile-nav-backdrop {
     display: block;
@@ -302,8 +317,15 @@ body {
     display: block;
     text-align: center !important;
   }
-  .mobile-record-table td.table-empty::before {
+  .mobile-record-table td.table-empty::before,
+  .mobile-record-table td[data-label=""]::before {
     content: none;
+  }
+  .mobile-record-table td[data-label=""] {
+    display: block;
+  }
+  .mobile-record-table td.table-row-action {
+    display: none;
   }
   .mobile-record-table td > *,
   .mobile-record-table td form {
