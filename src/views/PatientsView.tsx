@@ -389,7 +389,7 @@ export const PatientsView: React.FC = () => {
 
           {/* Table */}
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+            <table className="mobile-record-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border-glass)", color: "var(--text-muted)", textAlign: "left" }}>
                   <th style={{ padding: "10px" }}>Research ID</th>
@@ -413,22 +413,22 @@ export const PatientsView: React.FC = () => {
                         background: isSelected ? "var(--primary-light)" : "transparent",
                       }}
                     >
-                      <td style={{ padding: "12px 10px", fontFamily: "var(--font-mono)", color: "var(--primary)", fontWeight: 600 }}>
+                      <td data-label="Research ID" style={{ padding: "12px 10px", fontFamily: "var(--font-mono)", color: "var(--primary)", fontWeight: 600 }}>
                         {p.research_id}
                       </td>
-                      <td style={{ padding: "12px 10px", fontWeight: 600, color: "var(--text-main)" }}>
+                      <td data-label="Patient Name" style={{ padding: "12px 10px", fontWeight: 600, color: "var(--text-main)" }}>
                         {p.full_name}
                       </td>
-                      <td style={{ padding: "12px 10px", color: "var(--text-muted)" }}>
+                      <td data-label="HRN" style={{ padding: "12px 10px", color: "var(--text-muted)" }}>
                         {p.hrn || "None"}
                       </td>
-                      <td style={{ padding: "12px 10px" }}>
+                      <td data-label="Age" style={{ padding: "12px 10px" }}>
                         {p.calculated_age ?? "-"}
                       </td>
-                      <td style={{ padding: "12px 10px" }}>
+                      <td data-label="Sex" style={{ padding: "12px 10px" }}>
                         {p.sex || "-"}
                       </td>
-                      <td style={{ padding: "12px 10px" }}>
+                      <td className="table-row-action" data-label="Action" style={{ padding: "12px 10px" }}>
                         <ArrowRight size={14} color="var(--primary)" />
                       </td>
                     </tr>

@@ -238,6 +238,87 @@ body {
   .glass-sidebar { transition: none; }
 }
 
+@media screen and (max-width: 767px) {
+  .mobile-record-table,
+  .mobile-record-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .mobile-record-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+  .mobile-record-table tbody {
+    padding: 12px;
+  }
+  .mobile-record-table tbody tr {
+    display: block;
+    margin-bottom: 12px;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  .mobile-record-table tbody tr:last-child {
+    margin-bottom: 0;
+  }
+  .mobile-record-table td {
+    display: grid;
+    grid-template-columns: minmax(86px, 38%) minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    min-width: 0 !important;
+    padding: 9px 12px !important;
+    border: 0 !important;
+    white-space: normal !important;
+    text-align: left !important;
+    overflow-wrap: anywhere;
+  }
+  .mobile-record-table td + td {
+    border-top: 1px solid var(--border-subtle) !important;
+  }
+  .mobile-record-table td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.4;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .mobile-record-table td[data-label="Action"],
+  .mobile-record-table td[data-label="Actions"] {
+    display: block;
+  }
+  .mobile-record-table td[data-label="Action"]::before,
+  .mobile-record-table td[data-label="Actions"]::before {
+    display: block;
+    margin-bottom: 8px;
+  }
+  .mobile-record-table td.table-empty {
+    display: block;
+    text-align: center !important;
+  }
+  .mobile-record-table td.table-empty::before {
+    content: none;
+  }
+  .mobile-record-table td > *,
+  .mobile-record-table td form {
+    min-width: 0 !important;
+    max-width: 100%;
+  }
+  .mobile-record-table td[data-label="Actions"] > div,
+  .mobile-record-table td[data-label="Action"] > div {
+    flex-wrap: wrap;
+  }
+  .mobile-record-table .glass-btn {
+    min-height: 40px;
+  }
+}
+
 .glass-card {
   background: var(--bg-card);
   backdrop-filter: blur(var(--blur-amount));

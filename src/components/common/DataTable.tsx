@@ -80,7 +80,7 @@ export function DataTable<T>({
       )}
 
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <table className="mobile-record-table" style={{ width: "100%", borderCollapse: "collapse" }}>
           <caption style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>{caption}</caption>
           <thead>
             <tr>
@@ -99,7 +99,7 @@ export function DataTable<T>({
                   style={{ cursor: onRowClick ? "pointer" : "default", background: selected ? "var(--primary-light)" : "transparent" }}
                 >
                   {columns.map((c) => (
-                    <td key={c.key} style={{ ...CELL, textAlign: c.align ?? "left", whiteSpace: c.nowrap ? "nowrap" : undefined }}>
+                    <td key={c.key} data-label={c.header} style={{ ...CELL, textAlign: c.align ?? "left", whiteSpace: c.nowrap ? "nowrap" : undefined }}>
                       {c.render(row)}
                     </td>
                   ))}
@@ -108,7 +108,7 @@ export function DataTable<T>({
             })}
             {pageData.rows.length === 0 && (
               <tr>
-                <td colSpan={columns.length} style={{ ...CELL, textAlign: "center", color: "var(--text-muted)", padding: "32px" }}>
+                <td className="table-empty" colSpan={columns.length} style={{ ...CELL, textAlign: "center", color: "var(--text-muted)", padding: "32px" }}>
                   {rows.length === 0 ? emptyMessage : "No matches for this search."}
                 </td>
               </tr>

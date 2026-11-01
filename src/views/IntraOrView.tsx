@@ -359,7 +359,7 @@ export const IntraOrView: React.FC = () => {
               </div>
             ) : (
               <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+                <table className="mobile-record-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
                   <thead>
                     <tr style={{ borderBottom: "1px solid var(--border-glass)", color: "var(--text-muted)", textAlign: "left" }}>
                       <th style={{ padding: "8px" }}>Device Name</th>
@@ -373,14 +373,14 @@ export const IntraOrView: React.FC = () => {
                   <tbody>
                     {implants.map((imp) => (
                       <tr key={imp.implant_id} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-                        <td style={{ padding: "8px", fontWeight: 600 }}>{imp.device_name}</td>
-                        <td style={{ padding: "8px" }}>{imp.manufacturer || "-"}</td>
-                        <td style={{ padding: "8px" }}>
+                        <td data-label="Device Name" style={{ padding: "8px", fontWeight: 600 }}>{imp.device_name}</td>
+                        <td data-label="Manufacturer" style={{ padding: "8px" }}>{imp.manufacturer || "-"}</td>
+                        <td data-label="Model / Lot / Serial" style={{ padding: "8px" }}>
                           {[imp.model_number, imp.lot_number, imp.serial_number].filter(Boolean).join(" / ") || "-"}
                         </td>
-                        <td style={{ padding: "8px" }}>{imp.anatomical_site || "-"}</td>
-                        <td style={{ padding: "8px", fontFamily: "var(--font-mono)", fontSize: "11px" }}>{imp.udi_barcode || "-"}</td>
-                        <td style={{ padding: "8px" }}>
+                        <td data-label="Site" style={{ padding: "8px" }}>{imp.anatomical_site || "-"}</td>
+                        <td data-label="UDI Barcode" style={{ padding: "8px", fontFamily: "var(--font-mono)", fontSize: "11px" }}>{imp.udi_barcode || "-"}</td>
+                        <td data-label="Action" style={{ padding: "8px" }}>
                           <button
                             type="button"
                             onClick={() => handleDeleteImplant(imp.implant_id)}

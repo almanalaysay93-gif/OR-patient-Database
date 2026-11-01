@@ -172,7 +172,7 @@ export const BackupPanel: React.FC = () => {
 
       {desktop && (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <table className="mobile-record-table" style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
                 {["Backup file", "Type", "Created", "Size", ""].map((h) => (
@@ -182,15 +182,15 @@ export const BackupPanel: React.FC = () => {
             </thead>
             <tbody>
               {files.length === 0 && (
-                <tr><td colSpan={5} style={{ ...cell, color: "var(--text-muted)" }}>No backups yet. The first automatic backup is taken when the app starts.</td></tr>
+                <tr><td className="table-empty" colSpan={5} style={{ ...cell, color: "var(--text-muted)" }}>No backups yet. The first automatic backup is taken when the app starts.</td></tr>
               )}
               {files.map((f) => (
                 <tr key={f.name}>
-                  <td style={{ ...cell, fontFamily: "var(--font-mono)", fontSize: "12px" }}>{f.name}</td>
-                  <td style={cell}>{kindOf(f.name)}</td>
-                  <td style={cell}>{new Date(f.modified).toLocaleString()}</td>
-                  <td style={cell}>{sizeOf(f.size)}</td>
-                  <td style={cell}>
+                  <td data-label="Backup file" style={{ ...cell, fontFamily: "var(--font-mono)", fontSize: "12px" }}>{f.name}</td>
+                  <td data-label="Type" style={cell}>{kindOf(f.name)}</td>
+                  <td data-label="Created" style={cell}>{new Date(f.modified).toLocaleString()}</td>
+                  <td data-label="Size" style={cell}>{sizeOf(f.size)}</td>
+                  <td data-label="Action" style={cell}>
                     {can("db.restore") && (
                       <button className="glass-btn glass-btn-secondary" disabled={busy} style={{ padding: "4px 10px", fontSize: "12px", gap: "6px" }} onClick={() => { setRestoreTarget(f.name); setConfirmText(""); setOtherPcKey(""); }}>
                         <RotateCcw size={12} />

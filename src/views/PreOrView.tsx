@@ -134,7 +134,7 @@ export const PreOrView: React.FC = () => {
 
       <div className="glass-card" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+          <table className="mobile-record-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--text-muted)", borderBottom: "1px solid var(--border-glass)" }}>
                 {["Patient", "HRN", "Case", "Procedure", "Stage", "Room", "Readiness", "Actions"].map((h) => (
@@ -149,20 +149,20 @@ export const PreOrView: React.FC = () => {
                   onClick={() => { setSelectedCaseId(c.case_id); setSelectedPatientId(c.patient_id); }}
                   style={{ cursor: "pointer", borderBottom: "1px solid var(--border-subtle)" }}
                 >
-                  <td style={{ padding: "12px 14px", fontWeight: 700, color: "var(--text-main)", whiteSpace: "nowrap" }}>{c.patient_name}</td>
-                  <td style={{ padding: "12px 14px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{c.hrn || "-"}</td>
-                  <td style={{ padding: "12px 14px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{c.case_number}</td>
-                  <td style={{ padding: "12px 14px", color: "var(--text-main)", minWidth: 200 }}>{c.planned_procedure_summary || "Procedure"}</td>
-                  <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+                  <td data-label="Patient" style={{ padding: "12px 14px", fontWeight: 700, color: "var(--text-main)", whiteSpace: "nowrap" }}>{c.patient_name}</td>
+                  <td data-label="HRN" style={{ padding: "12px 14px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{c.hrn || "-"}</td>
+                  <td data-label="Case" style={{ padding: "12px 14px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{c.case_number}</td>
+                  <td data-label="Procedure" style={{ padding: "12px 14px", color: "var(--text-main)", minWidth: 200 }}>{c.planned_procedure_summary || "Procedure"}</td>
+                  <td data-label="Stage" style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
                     {stages.find((s) => s.value === c.case_status)?.label || c.case_status}
                   </td>
-                  <td style={{ padding: "12px 14px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{c.room_name || "Unassigned"}</td>
-                  <td style={{ padding: "12px 14px" }}>
+                  <td data-label="Room" style={{ padding: "12px 14px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{c.room_name || "Unassigned"}</td>
+                  <td data-label="Readiness" style={{ padding: "12px 14px" }}>
                     <span className={`badge ${readinessClass(c.readiness_percentage)}`} style={{ fontSize: "11px" }}>
                       {c.readiness_percentage}%
                     </span>
                   </td>
-                  <td style={{ padding: "12px 14px" }} onClick={(e) => e.stopPropagation()}>
+                  <td data-label="Actions" style={{ padding: "12px 14px" }} onClick={(e) => e.stopPropagation()}>
                     <CaseActions
                       caseId={c.case_id} status={c.case_status}
                       caseLabel={`${c.case_number} - ${c.patient_name}`} onDone={loadBoard}
@@ -172,7 +172,7 @@ export const PreOrView: React.FC = () => {
               ))}
               {pageData.rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ padding: "32px", textAlign: "center", color: "var(--text-muted)" }}>
+                  <td className="table-empty" colSpan={8} style={{ padding: "32px", textAlign: "center", color: "var(--text-muted)" }}>
                     {boardCases.length === 0 ? "No cases on the Pre-OR board." : "No cases match this search or stage."}
                   </td>
                 </tr>

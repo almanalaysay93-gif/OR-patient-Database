@@ -181,7 +181,7 @@ export const UsersPanel: React.FC = () => {
       </form>
 
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <table className="mobile-record-table" style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
               {["Name", "Username", "Role", "Status", "Last sign-in", "Saved password", "Actions"].map((h) => (
@@ -195,9 +195,9 @@ export const UsersPanel: React.FC = () => {
               const isSelf = u.user_id === session?.userId;
               return (
                 <tr key={u.user_id}>
-                  <td style={cell}>{u.full_name}</td>
-                  <td style={{ ...cell, fontFamily: "var(--font-mono)" }}>{u.username}</td>
-                  <td style={cell}>
+                  <td data-label="Name" style={cell}>{u.full_name}</td>
+                  <td data-label="Username" style={{ ...cell, fontFamily: "var(--font-mono)" }}>{u.username}</td>
+                  <td data-label="Role" style={cell}>
                     <select
                       className="glass-input" aria-label={`Role for ${u.username}`} style={{ padding: "4px 8px", fontSize: "12px" }}
                       value={u.role_id} disabled={busy || isMaster || isSelf}
@@ -206,11 +206,11 @@ export const UsersPanel: React.FC = () => {
                       {roles.map((r) => <option key={r.role_id} value={r.role_id}>{r.name}</option>)}
                     </select>
                   </td>
-                  <td style={cell}>
+                  <td data-label="Status" style={cell}>
                     <span className={`badge ${u.active ? "badge-success" : "badge-neutral"}`}>{u.active ? "Active" : "Deactivated"}</span>
                   </td>
-                  <td style={cell}>{u.last_login_at ? new Date(u.last_login_at).toLocaleString() : "Never"}</td>
-                  <td style={cell}>
+                  <td data-label="Last sign-in" style={cell}>{u.last_login_at ? new Date(u.last_login_at).toLocaleString() : "Never"}</td>
+                  <td data-label="Saved password" style={cell}>
                     {!u.password_saved_at ? (
                       <span style={{ color: "var(--text-subtle)" }}>None</span>
                     ) : shown[u.user_id] !== undefined ? (
@@ -237,7 +237,7 @@ export const UsersPanel: React.FC = () => {
                       </button>
                     )}
                   </td>
-                  <td style={cell}>
+                  <td data-label="Actions" style={cell}>
                     {resetFor === u.user_id ? (
                       <form onSubmit={(e) => handleReset(e, u)} style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: "320px" }}>
                         <PasswordField
