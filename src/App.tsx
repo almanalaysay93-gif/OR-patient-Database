@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AppProvider, useApp, type NavView } from "./context/AppContext";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Header } from "./components/layout/Header";
@@ -32,11 +32,25 @@ const EDIT_PERMISSIONS: Partial<Record<NavView, string[]>> = {
 
 const MainLayout: React.FC = () => {
   const { currentView, session, locked, can, loading, needsRecoveryKey, error, toast } = useApp();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const navWasOpen = useRef(false);
+  useEffect(() => { setMobileNavOpen(false); }, [currentView, locked]);
+  useEffect(() => {
+    if (mobileNavOpen) document.querySelector<HTMLElement>("#app-navigation nav button")?.focus();
+    else if (navWasOpen.current) document.querySelector<HTMLElement>(".mobile-menu-button")?.focus();
+    navWasOpen.current = mobileNavOpen;
+  }, [mobileNavOpen]);
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setMobileNavOpen(false); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [mobileNavOpen]);
   const editPermissions = EDIT_PERMISSIONS[currentView];
   const readOnly = !!editPermissions && !editPermissions.some(can);
 
   return (
-    <div style={{ display: "flex", height: "100vh", width: "100vw", overflow: "hidden" }}>
+    <div className="app-shell" style={{ display: "flex", height: "100vh", width: "100vw", overflow: "hidden" }}>
       {!session ? (
         needsRecoveryKey ? (
           <RecoveryKeyScreen />
@@ -53,7 +67,7 @@ const MainLayout: React.FC = () => {
       ) : (
         <>
           {/* Hidden, not unmounted, while locked: unsaved form entries survive the lock. */}
-          <div inert={locked} style={{ display: locked ? "none" : "flex", flex: 1, minWidth: 0 }}>
+          <div className="app-workspace" inert={locked} style={{ display: locked ? "none" : "flex", flex: 1, minWidth: 0 }}>
             {/* First Tab stop: moves focus past the sidebar and header to the active screen. */}
             <a
               href="#main-content"
@@ -65,10 +79,11 @@ const MainLayout: React.FC = () => {
             >
               Skip to content
             </a>
-            <Sidebar />
+            {mobileNavOpen && <button className="mobile-nav-backdrop" type="button" aria-label="Close navigation" onClick={() => setMobileNavOpen(false)} />}
+            <Sidebar mobileOpen={mobileNavOpen} onNavigate={() => setMobileNavOpen(false)} />
 
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
-              <Header />
+            <div className="app-content" style={{ flex: 1, display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
+              <Header onMenuClick={() => setMobileNavOpen(true)} />
 
               <main id="main-content" tabIndex={-1} style={{ flex: 1, overflowY: "auto", overflowX: "hidden", outline: "none" }}>
                 {readOnly && (

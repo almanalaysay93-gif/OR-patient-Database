@@ -9,10 +9,11 @@ import {
   Shield,
   LogOut,
   Lock,
+  Menu,
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
 
-export const Header: React.FC = () => {
+export const Header: React.FC<{ onMenuClick: () => void }> = ({ onMenuClick }) => {
   const {
     session,
     theme,
@@ -35,11 +36,12 @@ export const Header: React.FC = () => {
 
   return (
     <header className="glass-header" style={{ height: "64px", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 28px" }}>
+      <button type="button" className="mobile-menu-button glass-btn glass-btn-secondary" onClick={onMenuClick} aria-label="Open navigation" aria-controls="app-navigation"><Menu size={20} /></button>
       {/* Global Search Button */}
       <button
         onClick={() => setSearchOpen(true)}
         disabled={!can("patients.view")}
-        className="glass-input"
+        className="glass-input header-search"
         style={{
           width: "320px",
           display: "flex",
@@ -52,7 +54,7 @@ export const Header: React.FC = () => {
       >
         <Search size={16} />
         <span style={{ fontSize: "13px" }}>Search patient, HRN, case...</span>
-        <span style={{
+        <span className="search-shortcut" style={{
           marginLeft: "auto",
           fontSize: "11px",
           background: "var(--border-subtle)",
@@ -65,13 +67,14 @@ export const Header: React.FC = () => {
       </button>
 
       {/* Right Controls */}
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+      <div className="header-controls" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
         {/* AI Assistant */}
         <button
           onClick={() => setAssistantOpen(!assistantOpen)}
           disabled={!can("patients.view")}
           title="Ask the assistant (Ctrl+J)"
-          className={`glass-btn ${assistantOpen ? "glass-btn-primary" : "glass-btn-secondary"}`}
+          aria-label="Ask the assistant"
+          className={`glass-btn header-assistant ${assistantOpen ? "glass-btn-primary" : "glass-btn-secondary"}`}
           style={{ padding: "6px 12px", fontSize: "12px", gap: "6px" }}
         >
           <Bot size={14} />
@@ -82,7 +85,7 @@ export const Header: React.FC = () => {
         <button
           onClick={cycleEffects}
           title={`Visual Effects: ${visualEffects}. Click to cycle.`}
-          className="glass-btn glass-btn-secondary"
+          className="glass-btn glass-btn-secondary header-effects"
           style={{ padding: "6px 12px", fontSize: "12px", gap: "6px" }}
         >
           <Sparkles size={14} color={visualEffects === "FULL" ? "#0284c7" : "#94a3b8"} />
@@ -93,7 +96,7 @@ export const Header: React.FC = () => {
         <button
           onClick={() => setTheme(theme === "light" ? "dark" : "light")}
           title="Toggle light/dark theme"
-          className="glass-btn glass-btn-secondary"
+          className="glass-btn glass-btn-secondary header-theme"
           style={{ padding: "8px" }}
         >
           {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
@@ -101,7 +104,7 @@ export const Header: React.FC = () => {
 
         {/* User Pill */}
         {session ? (
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--bg-card)", padding: "4px 10px 4px 6px", borderRadius: "20px", border: "1px solid var(--border-glass)" }}>
+          <div className="header-user" style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--bg-card)", padding: "4px 10px 4px 6px", borderRadius: "20px", border: "1px solid var(--border-glass)" }}>
             <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: "var(--primary)", color: "white", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <User size={14} />
             </div>

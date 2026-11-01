@@ -33,11 +33,11 @@ const NAV_ITEMS: NavItem[] = [
   { id: "appmap", label: "App Map", icon: Workflow },
 ];
 
-export const Sidebar: React.FC = () => {
+export const Sidebar: React.FC<{ mobileOpen: boolean; onNavigate: () => void }> = ({ mobileOpen, onNavigate }) => {
   const { currentView, session, setView, setVideoGuideOpen } = useApp();
 
   return (
-    <aside className="glass-sidebar" style={{ width: "240px", display: "flex", flexDirection: "column", height: "100vh" }}>
+    <aside id="app-navigation" className={`glass-sidebar${mobileOpen ? " mobile-open" : ""}`} style={{ width: "240px", display: "flex", flexDirection: "column", height: "100vh" }}>
       {/* Brand Header */}
       <div style={{ padding: "20px 18px", borderBottom: "1px solid var(--border-glass)", display: "flex", alignItems: "center", gap: "10px" }}>
         <div style={{
@@ -71,7 +71,7 @@ export const Sidebar: React.FC = () => {
           return (
             <button
               key={item.id}
-              onClick={() => setView(item.id)}
+              onClick={() => { setView(item.id); onNavigate(); }}
               aria-current={isActive ? "page" : undefined}
               style={{
                 display: "flex",
@@ -105,7 +105,7 @@ export const Sidebar: React.FC = () => {
       {/* Video Guide Launcher */}
       <div style={{ padding: "14px", borderTop: "1px solid var(--border-glass)" }}>
         <button
-          onClick={() => setVideoGuideOpen(true)}
+          onClick={() => { setVideoGuideOpen(true); onNavigate(); }}
           className="glass-btn glass-btn-secondary"
           style={{ width: "100%", justifyContent: "flex-start", gap: "10px", fontSize: "13px" }}
         >
